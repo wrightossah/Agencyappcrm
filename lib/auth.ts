@@ -1,7 +1,7 @@
 import { supabase } from "./supabase"
 import { redirect } from "next/navigation"
 
-export async function signUp(email: string, password: string) {
+export async function signUp(email: string, password: string, fullName = "", company = "", phoneNumber = "") {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -16,12 +16,29 @@ export async function signUp(email: string, password: string) {
       const trialEndDate = new Date(trialStartDate)
       trialEndDate.setDate(trialEndDate.getDate() + 14)
 
+      // Extract first and last name from full name
+      let firstName = ""
+      let lastName = ""
+
+      if (fullName) {
+        const nameParts = fullName.trim().split(/\s+/)
+        if (nameParts.length > 0) {
+          firstName = nameParts[0]
+          lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : ""
+        }
+      }
+
       await supabase.from("profiles").insert([
         {
           id: data.user.id,
           trial_start_date: trialStartDate.toISOString(),
           trial_end_date: trialEndDate.toISOString(),
           has_active_subscription: false,
+          full_name: fullName,
+          first_name: firstName,
+          last_name: lastName,
+          company: company,
+          phone_number: phoneNumber,
         },
       ])
     } catch (profileError) {

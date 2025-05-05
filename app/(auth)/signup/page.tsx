@@ -12,15 +12,16 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Eye, EyeOff, Shield } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { supabase } from "@/lib/supabase"
 
 export default function SignUpPage() {
-  const [fullName, setFullName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [company, setCompany] = useState("")
-  const [phoneNumber, setPhoneNumber] = useState("")
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    confirmPassword: "",
+    fullName: "",
+    company: "",
+    phoneNumber: "",
+  })
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -34,6 +35,7 @@ export default function SignUpPage() {
   })
   const router = useRouter()
   const { toast } = useToast()
+  const [error, setError] = useState("")
 
   const validateForm = () => {
     let isValid = true
@@ -47,46 +49,46 @@ export default function SignUpPage() {
     }
 
     // Validate full name
-    if (!fullName.trim()) {
+    if (!formData.fullName.trim()) {
       newErrors.fullName = "Full name is required"
       isValid = false
     }
 
     // Validate email
-    if (!email.trim()) {
+    if (!formData.email.trim()) {
       newErrors.email = "Email is required"
       isValid = false
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = "Please enter a valid email address"
       isValid = false
     }
 
     // Validate password
-    if (!password) {
+    if (!formData.password) {
       newErrors.password = "Password is required"
       isValid = false
-    } else if (password.length < 6) {
+    } else if (formData.password.length < 6) {
       newErrors.password = "Password must be at least 6 characters"
       isValid = false
     }
 
     // Validate confirm password
-    if (password !== confirmPassword) {
+    if (formData.password !== formData.confirmPassword) {
       newErrors.confirmPassword = "Passwords don't match"
       isValid = false
     }
 
     // Validate company
-    if (!company.trim()) {
+    if (!formData.company.trim()) {
       newErrors.company = "Insurance company is required"
       isValid = false
     }
 
     // Validate phone number (9 digits for Ghana numbers)
-    if (!phoneNumber.trim()) {
+    if (!formData.phoneNumber.trim()) {
       newErrors.phoneNumber = "Phone number is required"
       isValid = false
-    } else if (!/^\d{9}$/.test(phoneNumber.trim())) {
+    } else if (!/^\d{9}$/.test(formData.phoneNumber.trim())) {
       newErrors.phoneNumber = "Please enter a valid 9-digit Ghanaian phone number"
       isValid = false
     }
@@ -104,7 +106,7 @@ export default function SignUpPage() {
     // If it starts with 0, remove it
     const normalizedNumber = digitsOnly.startsWith("0") ? digitsOnly.substring(1) : digitsOnly
 
-    setPhoneNumber(normalizedNumber)
+    setFormData({ ...formData, phoneNumber: normalizedNumber })
 
     // Clear error
     if (errors.phoneNumber) {
@@ -112,52 +114,30 @@ export default function SignUpPage() {
     }
   }
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setLoading(true)
+    setError("")
 
-    if (!validateForm()) {
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match")
+      setLoading(false)
       return
     }
 
-    setLoading(true)
-
     try {
-      // Format phone number with Ghana country code
-      const formattedPhoneNumber = `+233${phoneNumber}`
-
-      // Sign up the user
-      const { user } = await signUp(email, password)
-
-      if (user && user.id) {
-        // Create or update profile with full name, company and phone number
-        const { error: profileError } = await supabase.from("profiles").upsert({
-          id: user.id,
-          full_name: fullName,
-          first_name: fullName.split(" ")[0], // Extract first name
-          last_name: fullName.split(" ").slice(1).join(" "), // Extract last name
-          company: company,
-          phone: formattedPhoneNumber,
-          updated_at: new Date().toISOString(),
-        })
-
-        if (profileError) {
-          console.error("Error updating profile:", profileError)
-          // Continue even if profile update fails
-        }
-      }
-
-      toast({
-        title: "Account created",
-        description: "Please check your email to confirm your account.",
-      })
-      router.push("/login")
+      await signUp(formData.email, formData.password, formData.fullName, formData.company, formData.phoneNumber)
+      router.push("/thank-you")
     } catch (error: any) {
-      toast({
-        title: "Sign up failed",
-        description: error.message || "There was a problem creating your account.",
-        variant: "destructive",
-      })
-    } finally {
+      setError(error.message || "An error occurred during sign up")
       setLoading(false)
     }
   }
@@ -182,14 +162,12 @@ export default function SignUpPage() {
               <Label htmlFor="fullName">Full Name</Label>
               <Input
                 id="fullName"
-                type="text"
+                name="fullName"
                 placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className={errors.fullName ? "border-red-500" : ""}
+                value={formData.fullName}
+                onChange={handleChange}
                 required
               />
-              {errors.fullName && <p className="text-sm text-red-500">{errors.fullName}</p>}
             </div>
 
             <div className="space-y-2">
@@ -198,8 +176,8 @@ export default function SignUpPage() {
                 id="email"
                 type="email"
                 placeholder="name@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={formData.email}
+                onChange={handleChange}
                 className={errors.email ? "border-red-500" : ""}
                 required
               />
@@ -212,8 +190,8 @@ export default function SignUpPage() {
                 id="company"
                 type="text"
                 placeholder="Your insurance company"
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
+                value={formData.company}
+                onChange={handleChange}
                 className={errors.company ? "border-red-500" : ""}
                 required
               />
@@ -228,7 +206,7 @@ export default function SignUpPage() {
                   id="phone_number"
                   type="tel"
                   placeholder="202123456"
-                  value={phoneNumber}
+                  value={formData.phoneNumber}
                   onChange={handlePhoneChange}
                   className={`pl-12 ${errors.phoneNumber ? "border-red-500" : ""}`}
                   required
@@ -244,8 +222,8 @@ export default function SignUpPage() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={formData.password}
+                  onChange={handleChange}
                   className={errors.password ? "border-red-500" : ""}
                   required
                 />
@@ -269,8 +247,8 @@ export default function SignUpPage() {
                 <Input
                   id="confirm-password"
                   type={showConfirmPassword ? "text" : "password"}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
                   className={errors.confirmPassword ? "border-red-500" : ""}
                   required
                 />
@@ -287,6 +265,8 @@ export default function SignUpPage() {
               </div>
               {errors.confirmPassword && <p className="text-sm text-red-500">{errors.confirmPassword}</p>}
             </div>
+
+            {error && <p className="text-sm text-red-500">{error}</p>}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (

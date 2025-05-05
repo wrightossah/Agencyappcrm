@@ -35,9 +35,20 @@ interface ClientFormProps {
   client: Client | null
   isEditing: boolean
   isSubmitting: boolean
+  emailExists?: boolean
+  phoneExists?: boolean
 }
 
-export default function ClientForm({ isOpen, onClose, onSave, client, isEditing, isSubmitting }: ClientFormProps) {
+export default function ClientForm({
+  isOpen,
+  onClose,
+  onSave,
+  client,
+  isEditing,
+  isSubmitting,
+  emailExists = false,
+  phoneExists = false,
+}: ClientFormProps) {
   // Update the formData state to include both phone and phone_number
   const [formData, setFormData] = useState({
     id: "",
@@ -97,6 +108,23 @@ export default function ClientForm({ isOpen, onClose, onSave, client, isEditing,
       email: "",
     })
   }, [isOpen, client])
+
+  // Update errors when duplicate flags change
+  useEffect(() => {
+    if (emailExists) {
+      setErrors((prev) => ({
+        ...prev,
+        email: "This email is already linked to another client. Please use a different email address.",
+      }))
+    }
+
+    if (phoneExists) {
+      setErrors((prev) => ({
+        ...prev,
+        phone_number: "This phone number is already associated with another client.",
+      }))
+    }
+  }, [emailExists, phoneExists])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -158,6 +186,17 @@ export default function ClientForm({ isOpen, onClose, onSave, client, isEditing,
       isValid = false
     } else if (!/\S+@\S+\.\S+/.test(formData.email.trim())) {
       newErrors.email = "Please enter a valid email address"
+      isValid = false
+    }
+
+    // Keep existing duplicate errors
+    if (emailExists) {
+      newErrors.email = "This email is already linked to another client. Please use a different email address."
+      isValid = false
+    }
+
+    if (phoneExists) {
+      newErrors.phone_number = "This phone number is already associated with another client."
       isValid = false
     }
 
@@ -260,7 +299,7 @@ export default function ClientForm({ isOpen, onClose, onSave, client, isEditing,
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || emailExists || phoneExists}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
