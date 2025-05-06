@@ -83,11 +83,11 @@ export default function ClientForm({
       }
 
       setFormData({
-        id: client.id,
-        name: client.name,
-        address: client.address,
+        id: client.id || "",
+        name: client.name || "",
+        address: client.address || "",
         phone_number: phoneNumber, // Store without country code
-        email: client.email,
+        email: client.email || "",
       })
     } else if (isOpen) {
       // Reset form for new client

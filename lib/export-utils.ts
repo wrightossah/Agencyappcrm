@@ -1,144 +1,170 @@
 import { jsPDF } from "jspdf"
 import "jspdf-autotable"
-import type { ReportData } from "./types"
+import type { ReportType } from "./types"
 
-// Helper function to convert a date to a formatted string
-export const formatDate = (date: Date): string => {
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  })
+// Format date for filenames
+export function formatDate(date: Date): string {
+  return date.toISOString().split("T")[0]
 }
 
-// Export report data to CSV
-export const exportToCSV = (reportData: ReportData, reportType: string): void => {
-  // Create CSV content
-  let csvContent = `"${reportData.title}"\n"${reportData.description}"\n\n`
+// Prepare report data for export
+export function prepareReportData(reportType: ReportType, metrics: any[], charts: any, tables: any) {
+  return {
+    reportType,
+    title: getReportTitle(reportType),
+    date: formatDate(new Date()),
+    metrics,
+    charts,
+    tables,
+  }
+}
+
+// Get report title based on type
+function getReportTitle(reportType: ReportType): string {
+  switch (reportType) {
+    case "policy-summary":
+      return "Policy Summary Report"
+    case "client-acquisition":
+      return "Client Acquisition Report"
+    case "revenue-analysis":
+      return "Revenue Analysis Report"
+    case "claims-report":
+      return "Claims Report"
+    default:
+      return "Insurance Report"
+  }
+}
+
+// Export report as PDF
+export function exportToPDF(reportData: any, reportType: ReportType, clientName?: string) {
+  const doc = new jsPDF()
+  const title = reportData.title
+  const date = reportData.date
+
+  // Add title
+  doc.setFontSize(20)
+  doc.text(title, 14, 22)
+  doc.setFontSize(12)
+  doc.text(`Generated on: ${date}`, 14, 32)
+
+  if (clientName) {
+    doc.text(`Client: ${clientName}`, 14, 42)
+  }
+
+  let yPos = clientName ? 52 : 42
 
   // Add metrics
-  csvContent += '"Metrics:"\n'
-  reportData.metrics.forEach((metric) => {
-    csvContent += `"${metric.title}","${metric.value}","${metric.description || ""}"\n`
-  })
-  csvContent += "\n"
+  if (reportData.metrics && reportData.metrics.length > 0) {
+    doc.setFontSize(16)
+    doc.text("Key Metrics", 14, yPos)
+    yPos += 10
 
-  // Add tables
-  Object.entries(reportData.tables).forEach(([tableName, tableData]) => {
-    csvContent += `"${tableName}"\n`
-
-    // Add headers
-    csvContent += tableData.headers.map((header) => `"${header}"`).join(",") + "\n"
-
-    // Add rows
-    tableData.rows.forEach((row) => {
-      csvContent += row.map((cell) => `"${cell}"`).join(",") + "\n"
+    reportData.metrics.forEach((metric: any) => {
+      doc.setFontSize(12)
+      doc.text(`${metric.title}: ${metric.value}`, 20, yPos)
+      yPos += 8
+      if (metric.description) {
+        doc.setFontSize(10)
+        doc.text(
+          `${metric.description}${metric.trend ? ` (${metric.trend > 0 ? "+" : ""}${metric.trend}%)` : ""}`,
+          30,
+          yPos,
+        )
+        yPos += 8
+      }
     })
 
+    yPos += 10
+  }
+
+  // Add tables
+  if (reportData.tables && Object.keys(reportData.tables).length > 0) {
+    Object.entries(reportData.tables).forEach(([tableName, tableData]: [string, any]) => {
+      // Check if we need a new page
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      doc.setFontSize(16)
+      doc.text(tableName, 14, yPos)
+      yPos += 10
+
+      // @ts-ignore - jsPDF types are not properly defined for autoTable
+      doc.autoTable({
+        startY: yPos,
+        head: [tableData.headers],
+        body: tableData.rows,
+        margin: { top: 10 },
+        styles: { overflow: "linebreak" },
+        headStyles: { fillColor: [66, 66, 66] },
+      })
+
+      // @ts-ignore - accessing lastAutoTable which is added by the plugin
+      yPos = doc.lastAutoTable.finalY + 16
+    })
+  }
+
+  // Generate filename with client name if provided
+  const filename = clientName
+    ? `${reportType}-${clientName.replace(/\s+/g, "-").toLowerCase()}-${date}.pdf`
+    : `${reportType}-${date}.pdf`
+
+  // Save the PDF
+  doc.save(filename)
+}
+
+// Export report as CSV
+export function exportToCSV(reportData: any, reportType: ReportType, clientName?: string) {
+  const title = reportData.title
+  const date = reportData.date
+
+  let csvContent = `"${title}"\n"Generated on: ${date}"\n`
+
+  if (clientName) {
+    csvContent += `"Client: ${clientName}"\n`
+  }
+
+  csvContent += "\n"
+
+  // Add metrics
+  if (reportData.metrics && reportData.metrics.length > 0) {
+    csvContent += `"KEY METRICS"\n`
+    reportData.metrics.forEach((metric: any) => {
+      csvContent += `"${metric.title}","${metric.value}"\n`
+    })
     csvContent += "\n"
-  })
+  }
+
+  // Add tables
+  if (reportData.tables && Object.keys(reportData.tables).length > 0) {
+    Object.entries(reportData.tables).forEach(([tableName, tableData]: [string, any]) => {
+      csvContent += `"${tableName.toUpperCase()}"\n`
+
+      // Add headers
+      csvContent += tableData.headers.map((header: string) => `"${header}"`).join(",") + "\n"
+
+      // Add rows
+      tableData.rows.forEach((row: any[]) => {
+        csvContent += row.map((cell) => `"${cell}"`).join(",") + "\n"
+      })
+
+      csvContent += "\n"
+    })
+  }
+
+  // Generate filename with client name if provided
+  const filename = clientName
+    ? `${reportType}-${clientName.replace(/\s+/g, "-").toLowerCase()}-${date}.csv`
+    : `${reportType}-${date}.csv`
 
   // Create a blob and download
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
   const url = URL.createObjectURL(blob)
   const link = document.createElement("a")
   link.setAttribute("href", url)
-  link.setAttribute("download", `${reportType}-report-${formatDate(new Date())}.csv`)
+  link.setAttribute("download", filename)
   document.body.appendChild(link)
   link.click()
   document.body.removeChild(link)
-}
-
-// Export report data to PDF
-export const exportToPDF = (reportData: ReportData, reportType: string): void => {
-  // Create new PDF document
-  const doc = new jsPDF()
-
-  // Add title and description
-  doc.setFontSize(18)
-  doc.text(reportData.title, 14, 20)
-  doc.setFontSize(12)
-  doc.text(reportData.description, 14, 30)
-
-  // Add metrics
-  doc.setFontSize(14)
-  doc.text("Key Metrics", 14, 45)
-
-  let yPos = 55
-  reportData.metrics.forEach((metric) => {
-    doc.setFontSize(12)
-    doc.text(`${metric.title}: ${metric.value}`, 20, yPos)
-    if (metric.description) {
-      doc.setFontSize(10)
-      doc.text(metric.description, 20, yPos + 5)
-      yPos += 15
-    } else {
-      yPos += 10
-    }
-  })
-
-  // Add tables
-  yPos += 10
-  Object.entries(reportData.tables).forEach(([tableName, tableData]) => {
-    // Check if we need a new page
-    if (yPos > 250) {
-      doc.addPage()
-      yPos = 20
-    }
-
-    doc.setFontSize(14)
-    doc.text(tableName, 14, yPos)
-    yPos += 10
-
-    // Convert table data to format expected by autoTable
-    const tableHeaders = tableData.headers.map((header) => ({ title: header, dataKey: header }))
-    const tableRows = tableData.rows.map((row) => {
-      const rowObj: Record<string, any> = {}
-      tableData.headers.forEach((header, index) => {
-        rowObj[header] = row[index]
-      })
-      return rowObj
-    })
-
-    // @ts-ignore - jsPDF types are not properly defined for autoTable
-    doc.autoTable({
-      startY: yPos,
-      head: [tableData.headers],
-      body: tableData.rows,
-      margin: { top: 10 },
-      styles: { overflow: "linebreak" },
-      headStyles: { fillColor: [66, 66, 66] },
-    })
-
-    // @ts-ignore - accessing lastAutoTable which is added by the plugin
-    yPos = doc.lastAutoTable.finalY + 20
-  })
-
-  // Save the PDF
-  doc.save(`${reportType}-report-${formatDate(new Date())}.pdf`)
-}
-
-// Function to prepare report data for export
-export const prepareReportData = (reportType: string, metrics: any[], charts: any, tables: any): ReportData => {
-  const titles: Record<string, string> = {
-    "policy-summary": "Policy Summary Report",
-    "client-acquisition": "Client Acquisition Report",
-    "revenue-analysis": "Revenue Analysis Report",
-    "claims-report": "Claims Report",
-  }
-
-  const descriptions: Record<string, string> = {
-    "policy-summary": "Summary of all policy data and statistics",
-    "client-acquisition": "Analysis of client acquisition and sources",
-    "revenue-analysis": "Breakdown of revenue streams and growth",
-    "claims-report": "Overview of claims filed, approved, and pending",
-  }
-
-  return {
-    title: titles[reportType] || "Report",
-    description: descriptions[reportType] || "Generated report data",
-    metrics,
-    charts,
-    tables,
-  }
 }

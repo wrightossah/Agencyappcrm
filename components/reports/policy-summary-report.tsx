@@ -2,62 +2,60 @@
 
 import { FileText } from "lucide-react"
 import { MetricCard } from "./metric-card"
+import { ChartComponent } from "./chart-component"
 import { DataTable } from "./data-table"
 import type { TimeFrame } from "@/lib/types"
-import { generatePolicyTableData } from "@/lib/mock-data"
 
 interface PolicySummaryReportProps {
   timeFrame: TimeFrame
   dateRange: { from: Date | undefined; to: Date | undefined }
+  metrics?: any[]
+  charts?: any
+  tables?: any
 }
 
-export function PolicySummaryReport({ timeFrame, dateRange }: PolicySummaryReportProps) {
-  // Generate random metrics
-  const totalPolicies = 345
-  const newPolicies = 48
-  const renewals = 29
-  const avgPremium = 1450
-
-  // Generate table data
-  const policyTableData = generatePolicyTableData()
-
+export function PolicySummaryReport({
+  timeFrame,
+  dateRange,
+  metrics = [],
+  charts = {},
+  tables = {},
+}: PolicySummaryReportProps) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          title="Total Policies"
-          value={totalPolicies}
-          description="Active policies"
-          icon={<FileText className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="New Policies"
-          value={newPolicies}
-          description="This period"
-          trend={12}
-          icon={<FileText className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="Renewals"
-          value={renewals}
-          description="This period"
-          trend={5}
-          icon={<FileText className="h-4 w-4" />}
-        />
-        <MetricCard
-          title="Avg. Premium"
-          value={`Ghc ${avgPremium}`}
-          description="Per policy"
-          trend={-2}
-          icon={<FileText className="h-4 w-4" />}
-        />
+        {metrics.map((metric, index) => (
+          <MetricCard
+            key={index}
+            title={metric.title}
+            value={metric.value}
+            description={metric.description}
+            trend={metric.trend}
+            icon={<FileText className="h-4 w-4" />}
+          />
+        ))}
       </div>
 
-      <DataTable
-        title="Policy Details"
-        description="Detailed breakdown of policies by type"
-        tableData={policyTableData}
-      />
+      <div className="grid gap-6 md:grid-cols-2">
+        {Object.entries(charts).map(([title, chartData], index) => (
+          <ChartComponent
+            key={index}
+            title={title}
+            description={`${title} for the selected ${timeFrame} period`}
+            chartData={chartData}
+            type={(title?.toLowerCase() || "").includes("breakdown") ? "pie" : "line"}
+          />
+        ))}
+      </div>
+
+      {Object.entries(tables).map(([title, tableData], index) => (
+        <DataTable
+          key={index}
+          title={title}
+          description={`Detailed breakdown of ${title.toLowerCase()}`}
+          tableData={tableData}
+        />
+      ))}
     </div>
   )
 }

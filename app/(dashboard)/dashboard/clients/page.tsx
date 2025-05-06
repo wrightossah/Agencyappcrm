@@ -16,6 +16,7 @@ import PolicyList from "./policy-list"
 import DeleteConfirmation from "./delete-confirmation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import ClientReport from "./client-report"
+import { ensureAgentsTable, addCurrentUserAsAgent } from "./actions"
 
 // Update the Client interface to include both phone and phone_number
 interface Client {
@@ -79,12 +80,32 @@ export default function ClientsPage() {
   const { user } = useAuth()
   const router = useRouter()
 
-  // Fetch clients on component mount
+  // Ensure agents table and add current user as agent on component mount
   useEffect(() => {
     if (user) {
-      fetchClients()
+      setupAgentAndFetchClients()
     }
   }, [user])
+
+  // Setup agent and fetch clients
+  const setupAgentAndFetchClients = async () => {
+    if (!user) return
+
+    try {
+      // Ensure the agents table exists
+      await ensureAgentsTable()
+
+      // Add the current user as an agent if not already
+      await addCurrentUserAsAgent()
+
+      // Fetch clients
+      await fetchClients()
+    } catch (err: any) {
+      console.error("Error setting up agent:", err)
+      setError(err.message || "Failed to set up agent")
+      setLoading(false)
+    }
+  }
 
   // Filter clients when search query changes
   useEffect(() => {
@@ -93,7 +114,8 @@ export default function ClientsPage() {
     } else {
       const query = searchQuery.toLowerCase()
       const filtered = clients.filter(
-        (client) => client.name.toLowerCase().includes(query) || client.email.toLowerCase().includes(query),
+        (client) =>
+          (client.name?.toLowerCase() || "").includes(query) || (client.email?.toLowerCase() || "").includes(query),
       )
       setFilteredClients(filtered)
     }
@@ -115,8 +137,20 @@ export default function ClientsPage() {
 
       if (error) throw error
 
-      setClients(data || [])
-      setFilteredClients(data || [])
+      // Ensure all client objects have the required properties
+      const validatedClients = (data || []).map((client) => ({
+        id: client.id || "",
+        created_by: client.created_by || user.id,
+        name: client.name || "",
+        address: client.address || "",
+        phone: client.phone || client.phone_number || "",
+        phone_number: client.phone_number || client.phone || "",
+        email: client.email || "",
+        created_at: client.created_at || new Date().toISOString(),
+      }))
+
+      setClients(validatedClients)
+      setFilteredClients(validatedClients)
     } catch (err: any) {
       console.error("Error fetching clients:", err)
       setError(err.message || "Failed to fetch clients")
@@ -175,6 +209,24 @@ export default function ClientsPage() {
     setFormSubmitting(true)
 
     try {
+      // First, check if the user exists in the 'agents' table
+      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
+
+      if (agentError || !agent) {
+        // If agent doesn't exist, try to add them
+        const agentResult = await addCurrentUserAsAgent()
+
+        if (!agentResult.success) {
+          toast({
+            title: "Authorization Error",
+            description: "You are not authorized to add clients. Please contact support.",
+            variant: "destructive",
+          })
+          setFormSubmitting(false)
+          return
+        }
+      }
+
       // Check for duplicates
       const { emailExists, phoneExists } = await checkDuplicates(client.email, client.phone_number)
 
@@ -241,6 +293,19 @@ export default function ClientsPage() {
     setFormSubmitting(true)
 
     try {
+      // First, check if the user exists in the 'agents' table
+      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
+
+      if (agentError || !agent) {
+        toast({
+          title: "Authorization Error",
+          description: "You are not authorized to edit clients. Please contact support.",
+          variant: "destructive",
+        })
+        setFormSubmitting(false)
+        return
+      }
+
       // Check for duplicates
       const { emailExists, phoneExists } = await checkDuplicates(
         updatedClient.email,
@@ -313,6 +378,19 @@ export default function ClientsPage() {
     setFormSubmitting(true)
 
     try {
+      // First, check if the user exists in the 'agents' table
+      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
+
+      if (agentError || !agent) {
+        toast({
+          title: "Authorization Error",
+          description: "You are not authorized to delete clients. Please contact support.",
+          variant: "destructive",
+        })
+        setFormSubmitting(false)
+        return
+      }
+
       const { error } = await supabase.from("clients").delete().eq("id", currentClient.id).eq("created_by", user.id)
 
       if (error) throw error
@@ -345,6 +423,19 @@ export default function ClientsPage() {
     setFormSubmitting(true)
 
     try {
+      // First, check if the user exists in the 'agents' table
+      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
+
+      if (agentError || !agent) {
+        toast({
+          title: "Authorization Error",
+          description: "You are not authorized to add policies. Please contact support.",
+          variant: "destructive",
+        })
+        setFormSubmitting(false)
+        return
+      }
+
       const newPolicy = {
         client_id: clientId,
         policy_type: policy.policy_type,
@@ -389,6 +480,19 @@ export default function ClientsPage() {
     setFormSubmitting(true)
 
     try {
+      // First, check if the user exists in the 'agents' table
+      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
+
+      if (agentError || !agent) {
+        toast({
+          title: "Authorization Error",
+          description: "You are not authorized to submit claims. Please contact support.",
+          variant: "destructive",
+        })
+        setFormSubmitting(false)
+        return
+      }
+
       // Check if claims table exists, if not create it
       const { error: tableError } = await supabase.rpc("create_claims_table_if_not_exists")
 
@@ -477,6 +581,15 @@ export default function ClientsPage() {
 
   // Update the openWhatsAppChat function to use the phone number with country code
   const openWhatsAppChat = (phoneNumber: string) => {
+    if (!phoneNumber) {
+      toast({
+        title: "Error",
+        description: "No phone number available for this client.",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Format phone number for WhatsApp
     let formattedPhone = phoneNumber
 
@@ -524,16 +637,18 @@ export default function ClientsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted-foreground">Manage your client information and policies</p>
         </div>
-        <Button
-          onClick={() => {
-            setCurrentClient(null)
-            setIsEditing(false)
-            setIsClientFormOpen(true)
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Client
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              setCurrentClient(null)
+              setIsEditing(false)
+              setIsClientFormOpen(true)
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Client
+          </Button>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -585,17 +700,19 @@ export default function ClientsPage() {
                   <CardContent className="p-6">
                     <div className="space-y-4">
                       <div>
-                        <h3 className="font-semibold text-lg">{client.name}</h3>
-                        <p className="text-sm text-muted-foreground">{client.email}</p>
+                        <h3 className="font-semibold text-lg">{client.name || "Unnamed Client"}</h3>
+                        <p className="text-sm text-muted-foreground">{client.email || "No email"}</p>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-start">
                           <span className="font-medium text-sm w-20">Address:</span>
-                          <span className="text-sm">{client.address}</span>
+                          <span className="text-sm">{client.address || "No address"}</span>
                         </div>
                         <div className="flex items-center">
                           <span className="font-medium text-sm w-20">Phone:</span>
-                          <span className="text-sm">{formatPhoneNumber(client.phone || client.phone_number)}</span>
+                          <span className="text-sm">
+                            {formatPhoneNumber(client.phone || client.phone_number || "")}
+                          </span>
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2 pt-2">
@@ -611,7 +728,7 @@ export default function ClientsPage() {
                           size="sm"
                           variant="outline"
                           className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                          onClick={() => openWhatsAppChat(client.phone || client.phone_number)}
+                          onClick={() => openWhatsAppChat(client.phone || client.phone_number || "")}
                         >
                           <MessageCircle className="h-4 w-4 mr-1" />
                           WhatsApp
@@ -658,10 +775,10 @@ export default function ClientsPage() {
                 <tbody>
                   {filteredClients.map((client) => (
                     <tr key={client.id} className="border-b hover:bg-muted/50">
-                      <td className="py-3 px-4">{client.name}</td>
-                      <td className="py-3 px-4">{client.address}</td>
-                      <td className="py-3 px-4">{formatPhoneNumber(client.phone || client.phone_number)}</td>
-                      <td className="py-3 px-4">{client.email}</td>
+                      <td className="py-3 px-4">{client.name || "Unnamed Client"}</td>
+                      <td className="py-3 px-4">{client.address || "No address"}</td>
+                      <td className="py-3 px-4">{formatPhoneNumber(client.phone || client.phone_number || "")}</td>
+                      <td className="py-3 px-4">{client.email || "No email"}</td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex justify-end gap-2">
                           <Button size="sm" variant="ghost" onClick={() => openEditModal(client)}>
@@ -676,7 +793,7 @@ export default function ClientsPage() {
                             size="sm"
                             variant="ghost"
                             className="text-green-600 hover:text-green-700"
-                            onClick={() => openWhatsAppChat(client.phone || client.phone_number)}
+                            onClick={() => openWhatsAppChat(client.phone || client.phone_number || "")}
                           >
                             <MessageCircle className="h-4 w-4" />
                             <span className="sr-only">WhatsApp</span>
