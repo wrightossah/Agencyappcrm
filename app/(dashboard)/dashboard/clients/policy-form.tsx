@@ -14,7 +14,10 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2 } from "lucide-react"
+import { Loader2, DollarSign, Percent, AlertCircle } from "lucide-react"
+import { FormControl } from "@/components/ui/form"
+import { Switch } from "@/components/ui/switch"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Client {
   id: string
@@ -30,9 +33,13 @@ interface Policy {
   id: string
   client_id: string
   policy_type: string
+  policy_number?: string
   effective_date: string
   expiry_date: string
   premium_paid: number
+  commission_rate?: number
+  commission_amount?: number
+  active?: boolean
   created_at?: string
 }
 
@@ -50,19 +57,27 @@ const policyTypes = ["Motor", "Fire and Burglary", "Travel", "Performance Bond",
 export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitting }: PolicyFormProps) {
   const [formData, setFormData] = useState({
     policy_type: "",
+    policy_number: "",
     effective_date: "",
     expiry_date: "",
     premium_paid: "",
+    commission_rate: "10", // Default commission rate of 10%
   })
+
+  const [active, setActive] = useState(true) // Default to active
+  const [commissionAmount, setCommissionAmount] = useState<number | null>(null)
+  const [debugInfo, setDebugInfo] = useState<string | null>(null)
 
   const [errors, setErrors] = useState({
     policy_type: "",
+    policy_number: "",
     effective_date: "",
     expiry_date: "",
     premium_paid: "",
+    commission_rate: "",
   })
 
-  // Reset form when modal opens/closes
+  // Generate a policy number when the form opens
   useEffect(() => {
     if (isOpen) {
       // Set today's date as default for effective date
@@ -73,22 +88,55 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
       nextYear.setFullYear(nextYear.getFullYear() + 1)
       const defaultExpiryDate = nextYear.toISOString().split("T")[0]
 
+      // Generate a policy number
+      const policyNumber = generatePolicyNumber()
+
       setFormData({
         policy_type: "",
+        policy_number: policyNumber,
         effective_date: today,
         expiry_date: defaultExpiryDate,
         premium_paid: "",
+        commission_rate: "10", // Default commission rate
       })
+      setActive(true) // Reset active status
+      setCommissionAmount(null) // Reset commission amount
+      setDebugInfo(null) // Clear debug info
     }
 
     // Clear errors
     setErrors({
       policy_type: "",
+      policy_number: "",
       effective_date: "",
       expiry_date: "",
       premium_paid: "",
+      commission_rate: "",
     })
   }, [isOpen])
+
+  // Generate a policy number
+  const generatePolicyNumber = () => {
+    const prefix = "POL"
+    const timestamp = Date.now().toString().slice(-6)
+    const random = Math.floor(Math.random() * 1000)
+      .toString()
+      .padStart(3, "0")
+    return `${prefix}-${timestamp}-${random}`
+  }
+
+  // Calculate commission amount when premium or rate changes
+  useEffect(() => {
+    const premium = Number.parseFloat(formData.premium_paid)
+    const rate = Number.parseFloat(formData.commission_rate)
+
+    if (!isNaN(premium) && !isNaN(rate)) {
+      const amount = (premium * rate) / 100
+      setCommissionAmount(amount)
+    } else {
+      setCommissionAmount(null)
+    }
+  }, [formData.premium_paid, formData.commission_rate])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -100,18 +148,39 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
     }
   }
 
+  // Validate policy using the provided validation function
+  const isValidPolicy = (policy: any) => {
+    return (
+      policy.client_id &&
+      policy.policy_type &&
+      policy.policy_number &&
+      typeof policy.premium_paid === "number" &&
+      typeof policy.commission_rate === "number" &&
+      policy.effective_date &&
+      policy.expiry_date
+    )
+  }
+
   const validateForm = () => {
     let isValid = true
     const newErrors = {
       policy_type: "",
+      policy_number: "",
       effective_date: "",
       expiry_date: "",
       premium_paid: "",
+      commission_rate: "",
     }
 
     // Validate policy type
     if (!formData.policy_type.trim()) {
       newErrors.policy_type = "Policy type is required"
+      isValid = false
+    }
+
+    // Validate policy number
+    if (!formData.policy_number.trim()) {
+      newErrors.policy_number = "Policy number is required"
       isValid = false
     }
 
@@ -139,6 +208,18 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
       isValid = false
     }
 
+    // Validate commission rate
+    if (!formData.commission_rate) {
+      newErrors.commission_rate = "Commission rate is required"
+      isValid = false
+    } else {
+      const rate = Number.parseFloat(formData.commission_rate)
+      if (isNaN(rate) || rate < 0 || rate > 100) {
+        newErrors.commission_rate = "Commission rate must be between 0 and 100"
+        isValid = false
+      }
+    }
+
     setErrors(newErrors)
     return isValid
   }
@@ -147,11 +228,55 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
     e.preventDefault()
 
     if (validateForm() && client) {
-      onSave(client.id, {
+      // Calculate commission amount
+      const premium = Number.parseFloat(formData.premium_paid)
+      const rate = Number.parseFloat(formData.commission_rate)
+      const commission = (premium * rate) / 100
+
+      const policyData = {
         ...formData,
+        client_id: client.id,
         premium_paid: Number(formData.premium_paid),
-      })
+        commission_rate: Number(formData.commission_rate),
+        commission_amount: commission,
+        active: active,
+      }
+
+      // Log the policy data being submitted for debugging
+      console.log("Submitting policy:", policyData)
+
+      // Check if the policy is valid using the validation function
+      if (
+        !isValidPolicy({
+          ...policyData,
+          premium: policyData.premium_paid, // Map to the expected field name in validation
+          start_date: policyData.effective_date, // Map to the expected field name in validation
+          end_date: policyData.expiry_date, // Map to the expected field name in validation
+        })
+      ) {
+        setDebugInfo("Policy validation failed. Check console for details.")
+        console.error("Invalid policy data:", policyData)
+        return
+      }
+
+      // If validation passes, save the policy
+      try {
+        onSave(client.id, policyData)
+      } catch (error) {
+        console.error("Error:", error)
+        setDebugInfo(`Error: ${error instanceof Error ? error.message : "Unknown error"}`)
+      }
     }
+  }
+
+  // Format currency for display
+  const formatCurrency = (value: string) => {
+    if (!value) return ""
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency: "GHS",
+      minimumFractionDigits: 2,
+    }).format(Number.parseFloat(value))
   }
 
   return (
@@ -165,6 +290,13 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
+          {debugInfo && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{debugInfo}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="policy_type">Policy Type</Label>
             <div className="relative">
@@ -185,6 +317,19 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
               </datalist>
             </div>
             {errors.policy_type && <p className="text-sm text-red-500">{errors.policy_type}</p>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="policy_number">Policy Number</Label>
+            <Input
+              id="policy_number"
+              name="policy_number"
+              value={formData.policy_number}
+              onChange={handleChange}
+              className={errors.policy_number ? "border-red-500" : ""}
+              disabled={true} // Auto-generated, so disabled
+            />
+            {errors.policy_number && <p className="text-sm text-red-500">{errors.policy_number}</p>}
           </div>
 
           <div className="space-y-2">
@@ -217,19 +362,63 @@ export default function PolicyForm({ isOpen, onClose, onSave, client, isSubmitti
 
           <div className="space-y-2">
             <Label htmlFor="premium_paid">Premium Paid (GHC)</Label>
-            <Input
-              id="premium_paid"
-              name="premium_paid"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.premium_paid}
-              onChange={handleChange}
-              className={errors.premium_paid ? "border-red-500" : ""}
-              disabled={isSubmitting}
-            />
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                <DollarSign className="h-4 w-4" />
+              </div>
+              <Input
+                id="premium_paid"
+                name="premium_paid"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.premium_paid}
+                onChange={handleChange}
+                className={`pl-10 ${errors.premium_paid ? "border-red-500" : ""}`}
+                placeholder="0.00"
+                disabled={isSubmitting}
+              />
+            </div>
             {errors.premium_paid && <p className="text-sm text-red-500">{errors.premium_paid}</p>}
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="commission_rate">Commission Rate (%)</Label>
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">
+                <Percent className="h-4 w-4" />
+              </div>
+              <Input
+                id="commission_rate"
+                name="commission_rate"
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={formData.commission_rate}
+                onChange={handleChange}
+                className={`pl-10 ${errors.commission_rate ? "border-red-500" : ""}`}
+                placeholder="10.00"
+                disabled={isSubmitting}
+              />
+            </div>
+            {errors.commission_rate && <p className="text-sm text-red-500">{errors.commission_rate}</p>}
+          </div>
+
+          {commissionAmount !== null && (
+            <div className="rounded-md bg-muted p-3">
+              <p className="text-sm font-medium">Commission Amount: {formatCurrency(commissionAmount.toString())}</p>
+            </div>
+          )}
+
+          <FormControl>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="active" className="cursor-pointer">
+                Active Status
+              </Label>
+              <Switch id="active" checked={active} onCheckedChange={setActive} disabled={isSubmitting} />
+            </div>
+          </FormControl>
 
           <DialogFooter className="pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>

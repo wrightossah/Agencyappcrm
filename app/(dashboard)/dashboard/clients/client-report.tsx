@@ -1,4 +1,4 @@
-"use client"
+"\"use client"
 
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -622,3 +622,5 @@ export function ClientReport({ isOpen, onClose, client }: ClientReportProps) {
     </Dialog>
   )
 }
+
+export default ClientReport

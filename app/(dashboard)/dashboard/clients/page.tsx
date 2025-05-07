@@ -30,14 +30,18 @@ interface Client {
   created_at?: string
 }
 
-// Define policy type
+// Update the Policy interface to include the new fields
 interface Policy {
   id: string
   client_id: string
   policy_type: string
+  policy_number?: string
   effective_date: string
   expiry_date: string
   premium_paid: number
+  commission_rate?: number
+  commission_amount?: number
+  active?: boolean
   created_at?: string
 }
 
@@ -202,7 +206,7 @@ export default function ClientsPage() {
     }
   }
 
-  // Update the handleAddClient function to use the formatted phone number and check for duplicates
+  // Handle adding a client
   const handleAddClient = async (client: Omit<Client, "id" | "created_by">) => {
     if (!user) return
 
@@ -261,12 +265,18 @@ export default function ClientsPage() {
         email: client.email,
       }
 
-      const { data, error } = await supabase.from("clients").insert([newClient]).select()
+      const { data, error } = await supabase.from("clients").insert([newClient]).select("*")
 
       if (error) throw error
 
       if (data && data.length > 0) {
+        // Add the new client to the beginning of the clients array
         setClients([data[0], ...clients])
+        // Also update filtered clients if search query is empty
+        if (searchQuery.trim() === "") {
+          setFilteredClients([data[0], ...filteredClients])
+        }
+
         toast({
           title: "Client Added",
           description: `${client.name} has been added successfully.`,
@@ -278,7 +288,7 @@ export default function ClientsPage() {
       console.error("Error adding client:", err)
       toast({
         title: "Error",
-        description: err.message || "Failed to add client",
+        description: `Failed to add client: ${err.message || "Unknown error"}`,
         variant: "destructive",
       })
     } finally {
@@ -436,30 +446,67 @@ export default function ClientsPage() {
         return
       }
 
-      const newPolicy = {
+      // Prepare the payload
+      const payload = {
         client_id: clientId,
         policy_type: policy.policy_type,
+        policy_number: policy.policy_number,
         effective_date: policy.effective_date,
         expiry_date: policy.expiry_date,
         premium_paid: policy.premium_paid,
+        commission_rate: policy.commission_rate || 0,
+        commission_amount: policy.commission_amount || 0,
+        active: policy.active !== undefined ? policy.active : true,
       }
 
-      const { error } = await supabase.from("policies").insert([newPolicy])
+      console.log("Submitting policy:", payload)
 
-      if (error) throw error
+      // Validate the policy before submitting
+      const isValidPolicy = (policy: any) => {
+        return (
+          policy.client_id &&
+          policy.policy_type &&
+          policy.policy_number &&
+          typeof policy.premium_paid === "number" &&
+          typeof policy.commission_rate === "number" &&
+          policy.effective_date &&
+          policy.expiry_date
+        )
+      }
 
-      toast({
-        title: "Policy Added",
-        description: `New ${policy.policy_type} policy has been added successfully.`,
-      })
+      if (!isValidPolicy(payload)) {
+        console.error("Invalid policy data:", payload)
+        toast({
+          title: "Validation Error",
+          description: "Please fill in all required fields correctly.",
+          variant: "destructive",
+        })
+        setFormSubmitting(false)
+        return
+      }
 
-      setIsPolicyFormOpen(false)
-      // If policy list is open, refresh it
-      if (isPolicyListOpen) {
-        setIsPolicyListOpen(false)
-        setTimeout(() => {
-          setIsPolicyListOpen(true)
-        }, 100)
+      // Insert the policy and select the result
+      const { data, error } = await supabase.from("policies").insert(payload).select()
+
+      if (error) {
+        console.error("Insert failed:", error)
+        throw error
+      } else {
+        console.log("Insert success:", data)
+
+        toast({
+          title: "Policy Added",
+          description: `New ${policy.policy_type} policy has been added successfully.`,
+        })
+
+        setIsPolicyFormOpen(false)
+        // If policy list is open, refresh it
+        if (isPolicyListOpen) {
+          setIsPolicyListOpen(false)
+          setTimeout(() => {
+            setIsPolicyListOpen(true)
+          }, 100)
+        }
       }
     } catch (err: any) {
       console.error("Error adding policy:", err)

@@ -303,7 +303,7 @@ export default function ClientForm({
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {isEditing ? "Saving..." : "Adding..."}
+                  {isEditing ? "Saving..." : "Adding client..."}
                 </>
               ) : isEditing ? (
                 "Save Changes"

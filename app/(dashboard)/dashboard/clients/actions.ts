@@ -47,7 +47,7 @@ export async function createClient(formData?: FormData) {
     }
 
     // Step 4: Insert the client
-    const { data, error: insertError } = await supabase.from("clients").insert(clientData).select()
+    const { data, error: insertError } = await supabase.from("clients").insert(clientData).select("*")
 
     if (insertError) {
       throw new Error(`Error adding client: ${insertError.message}`)
