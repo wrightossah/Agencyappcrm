@@ -1,41 +1,25 @@
-import { arkeselSMS } from "./arkesel-sms"
-
-// SMS Service using Arkesel
-export async function sendSMS(
-  phoneNumber: string,
-  message: string,
-  options?: {
-    sender?: string
-    sandbox?: boolean
-    scheduleTime?: string
-  },
-) {
+// SMS Service using Twilio
+export async function sendSMS(phoneNumber: string, message: string) {
   try {
-    const result = await arkeselSMS.sendSMS({
-      recipients: [phoneNumber],
-      message: message,
-      sender: options?.sender,
-      sandbox: options?.sandbox || false,
-      scheduleTime: options?.scheduleTime,
+    const response = await fetch("/api/send-sms", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: phoneNumber,
+        message: message,
+      }),
     })
 
+    if (!response.ok) {
+      throw new Error("Failed to send SMS")
+    }
+
+    const result = await response.json()
     return result
   } catch (error) {
     console.error("SMS Error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
-  }
-}
-
-// Get SMS Balance
-export async function getSMSBalance() {
-  try {
-    const result = await arkeselSMS.getBalance()
-    return result
-  } catch (error) {
-    console.error("Balance Error:", error)
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -70,45 +54,6 @@ export async function sendEmail(to: string, subject: string, message: string, cl
     console.error("Email Error:", error)
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
   }
-}
-
-// Schedule SMS
-export async function scheduleSMS(
-  phoneNumber: string,
-  message: string,
-  scheduleTime: string,
-  options?: {
-    sender?: string
-    sandbox?: boolean
-  },
-) {
-  try {
-    const result = await arkeselSMS.scheduleSMS({
-      recipients: [phoneNumber],
-      message: message,
-      scheduleTime: scheduleTime,
-      sender: options?.sender,
-      sandbox: options?.sandbox || false,
-    })
-
-    return result
-  } catch (error) {
-    console.error("Schedule SMS Error:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    }
-  }
-}
-
-// Validate phone number
-export function validatePhoneNumber(phoneNumber: string): boolean {
-  return arkeselSMS.validatePhoneNumber(phoneNumber)
-}
-
-// Format phone number
-export function formatPhoneNumber(phoneNumber: string): string {
-  return arkeselSMS.formatPhoneNumber(phoneNumber)
 }
 
 // Default message templates

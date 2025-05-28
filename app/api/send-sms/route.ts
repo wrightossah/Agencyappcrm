@@ -1,9 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { arkeselSMS } from "@/lib/arkesel-sms"
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, message, sender, sandbox = false, scheduleTime } = await request.json()
+    const { to, message } = await request.json()
 
     // Validate inputs
     if (!to || !message) {
@@ -13,42 +12,53 @@ export async function POST(request: NextRequest) {
     // Ensure recipients is an array
     const recipients = Array.isArray(to) ? to : [to]
 
-    // Validate phone numbers
-    const invalidNumbers = recipients.filter((num) => !arkeselSMS.validatePhoneNumber(num))
-    if (invalidNumbers.length > 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Invalid phone numbers: ${invalidNumbers.join(", ")}`,
-        },
-        { status: 400 },
-      )
+    // Twilio integration
+    const accountSid = process.env.TWILIO_ACCOUNT_SID
+    const authToken = process.env.TWILIO_AUTH_TOKEN
+    const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER
+
+    if (!accountSid || !authToken || !twilioPhoneNumber) {
+      console.error("Twilio credentials missing in environment variables")
+      return NextResponse.json({ success: false, error: "Twilio credentials not configured" }, { status: 500 })
     }
 
-    // Send SMS using Arkesel
-    const result = await arkeselSMS.sendSMS({
-      recipients,
-      message,
-      sender,
-      sandbox,
-      scheduleTime,
-    })
+    const client = require("twilio")(accountSid, authToken)
 
-    if (result.success) {
-      return NextResponse.json({
-        success: true,
-        message: result.message,
-        data: result.data,
-      })
-    } else {
+    // Send SMS using Twilio
+    const results = await Promise.all(
+      recipients.map(async (recipient) => {
+        try {
+          const messageResult = await client.messages.create({
+            body: message,
+            from: twilioPhoneNumber,
+            to: recipient,
+          })
+          return { success: true, sid: messageResult.sid, to: recipient }
+        } catch (error: any) {
+          console.error(`Twilio Error for ${recipient}:`, error)
+          return { success: false, error: error.message, to: recipient }
+        }
+      }),
+    )
+
+    // Check for any errors
+    const errors = results.filter((r) => !r.success)
+    if (errors.length > 0) {
+      console.error("Twilio SMS sending errors:", errors)
       return NextResponse.json(
         {
           success: false,
-          error: result.error || result.message,
+          error: `Failed to send SMS to some recipients: ${errors.map((e) => `${e.to} - ${e.error}`).join(", ")}`,
         },
         { status: 500 },
       )
     }
+
+    return NextResponse.json({
+      success: true,
+      message: "SMS sent successfully",
+      data: results,
+    })
   } catch (error) {
     console.error("SMS API Error:", error)
     return NextResponse.json(
