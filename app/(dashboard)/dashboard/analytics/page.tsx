@@ -18,6 +18,7 @@ import { SalesPerformanceChart, CommissionBreakdownChart, PolicyDistributionChar
 import type { DateRange } from "react-day-picker"
 import { format, subMonths } from "date-fns"
 import { exportToCSV, exportToPDF } from "./export-utils"
+import { SalesTracker } from "./sales-tracker"
 
 export default function AnalyticsPage() {
   // Theme state
@@ -190,6 +191,9 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* Sales Tracker */}
+      <SalesTracker />
+
       {/* Error Message */}
       {error && (
         <Alert variant="destructive">
@@ -298,10 +302,13 @@ export default function AnalyticsPage() {
 
 // Helper Functions
 function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-GH", {
     style: "currency",
-    currency: "USD",
-  }).format(amount)
+    currency: "GHS",
+    currencyDisplay: "code",
+  })
+    .format(amount)
+    .replace("GHS", "Ghc")
 }
 
 function calculateTotalRevenue(data: any[]) {
@@ -339,7 +346,8 @@ async function fetchSalesData(fromDate: string | null, toDate: string | null, po
   let query = supabase.from("policies").select(`
       created_at,
       premium,
-      policy_type
+      policy_type,
+      premium_paid
     `)
 
   if (fromDate) {
@@ -369,7 +377,7 @@ async function fetchSalesData(fromDate: string | null, toDate: string | null, po
     }
 
     acc[month].sales += 1
-    acc[month].revenue += Number.parseFloat(policy.premium)
+    acc[month].revenue += Number.parseFloat(policy.premium_paid || policy.premium || 0)
 
     return acc
   }, {})
@@ -381,7 +389,8 @@ async function fetchCommissionData(fromDate: string | null, toDate: string | nul
   let query = supabase.from("policies").select(`
       policy_type,
       premium,
-      commission_rate
+      commission_rate,
+      premium_paid
     `)
 
   if (fromDate) {
@@ -410,7 +419,7 @@ async function fetchCommissionData(fromDate: string | null, toDate: string | nul
       acc[type] = { name: type, premium: 0, commission: 0 }
     }
 
-    const premium = Number.parseFloat(policy.premium)
+    const premium = Number.parseFloat(policy.premium_paid || policy.premium || 0)
     const commissionRate = Number.parseFloat(policy.commission_rate || 0.1) // Default 10% if not specified
 
     acc[type].premium += premium

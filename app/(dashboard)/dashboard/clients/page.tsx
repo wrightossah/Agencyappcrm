@@ -17,6 +17,8 @@ import DeleteConfirmation from "./delete-confirmation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import ClientReport from "./client-report"
 import { ensureAgentsTable, addCurrentUserAsAgent } from "./actions"
+import { CommunicationModal } from "./communication-modal"
+import { Mail, MessageSquare } from "lucide-react"
 
 // Update the Client interface to include both phone and phone_number
 interface Client {
@@ -35,12 +37,17 @@ interface Policy {
   id: string
   client_id: string
   policy_type: string
-  policy_number?: string
-  effective_date: string
-  expiry_date: string
+  policy_number: string
+  start_date: string
+  end_date: string
   premium_paid: number
+  premium_amount?: number
   commission_rate?: number
   commission_amount?: number
+  policy_provider?: string
+  status?: string
+  description?: string
+  is_renewable?: boolean
   active?: boolean
   created_at?: string
 }
@@ -75,6 +82,9 @@ export default function ClientsPage() {
   const [currentClient, setCurrentClient] = useState<Client | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
+
+  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false)
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
 
   // State for validation
   const [emailExists, setEmailExists] = useState(false)
@@ -446,17 +456,22 @@ export default function ClientsPage() {
         return
       }
 
-      // Prepare the payload
+      // Prepare the payload with all new fields
       const payload = {
         client_id: clientId,
         policy_type: policy.policy_type,
         policy_number: policy.policy_number,
-        effective_date: policy.effective_date,
-        expiry_date: policy.expiry_date,
-        premium_paid: policy.premium_paid,
+        start_date: policy.start_date,
+        end_date: policy.end_date,
+        premium_paid: policy.premium_paid || policy.premium_amount,
+        premium_amount: policy.premium_amount || policy.premium_paid,
         commission_rate: policy.commission_rate || 0,
         commission_amount: policy.commission_amount || 0,
-        active: policy.active !== undefined ? policy.active : true,
+        policy_provider: policy.policy_provider,
+        status: policy.status || "Active",
+        description: policy.description || null,
+        is_renewable: policy.is_renewable || false,
+        active: policy.active !== undefined ? policy.active : policy.status === "Active",
       }
 
       console.log("Submitting policy:", payload)
@@ -469,8 +484,10 @@ export default function ClientsPage() {
           policy.policy_number &&
           typeof policy.premium_paid === "number" &&
           typeof policy.commission_rate === "number" &&
-          policy.effective_date &&
-          policy.expiry_date
+          policy.start_date &&
+          policy.end_date &&
+          policy.policy_provider &&
+          policy.status
         )
       }
 
@@ -490,13 +507,26 @@ export default function ClientsPage() {
 
       if (error) {
         console.error("Insert failed:", error)
-        throw error
+
+        // Check if it's a duplicate policy number error
+        if (error.code === "23505" && error.message.includes("unique_policy_per_client")) {
+          toast({
+            title: "Duplicate Policy Number",
+            description: "This policy number already exists for this client. Please use a unique policy number.",
+            variant: "destructive",
+          })
+        } else {
+          throw error
+        }
       } else {
         console.log("Insert success:", data)
 
+        // Find the client name for the success message
+        const clientName = currentClient?.name || "the client"
+
         toast({
-          title: "Policy Added",
-          description: `New ${policy.policy_type} policy has been added successfully.`,
+          title: "Policy Added Successfully",
+          description: `Policy added successfully to ${clientName}.`,
         })
 
         setIsPolicyFormOpen(false)
@@ -577,6 +607,18 @@ export default function ClientsPage() {
     } finally {
       setFormSubmitting(false)
     }
+  }
+
+  // Open SMS modal
+  const openSmsModal = (client: Client) => {
+    setCurrentClient(client)
+    setIsSmsModalOpen(true)
+  }
+
+  // Open Email modal
+  const openEmailModal = (client: Client) => {
+    setCurrentClient(client)
+    setIsEmailModalOpen(true)
   }
 
   // Open edit client modal
@@ -780,6 +822,24 @@ export default function ClientsPage() {
                           <MessageCircle className="h-4 w-4 mr-1" />
                           WhatsApp
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          onClick={() => openSmsModal(client)}
+                        >
+                          <MessageSquare className="h-4 w-4 mr-1" />
+                          SMS
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
+                          onClick={() => openEmailModal(client)}
+                        >
+                          <Mail className="h-4 w-4 mr-1" />
+                          Email
+                        </Button>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button size="sm" variant="outline" onClick={() => openPolicyList(client)}>
@@ -844,6 +904,24 @@ export default function ClientsPage() {
                           >
                             <MessageCircle className="h-4 w-4" />
                             <span className="sr-only">WhatsApp</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-blue-600 hover:text-blue-700"
+                            onClick={() => openSmsModal(client)}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            <span className="sr-only">SMS</span>
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-purple-600 hover:text-purple-700"
+                            onClick={() => openEmailModal(client)}
+                          >
+                            <Mail className="h-4 w-4" />
+                            <span className="sr-only">Email</span>
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => openPolicyList(client)}>
                             <FileText className="h-4 w-4" />
@@ -950,6 +1028,28 @@ export default function ClientsPage() {
           setCurrentClient(null)
         }}
         client={currentClient}
+      />
+
+      {/* SMS Modal */}
+      <CommunicationModal
+        isOpen={isSmsModalOpen}
+        onClose={() => {
+          setIsSmsModalOpen(false)
+          setCurrentClient(null)
+        }}
+        client={currentClient}
+        type="sms"
+      />
+
+      {/* Email Modal */}
+      <CommunicationModal
+        isOpen={isEmailModalOpen}
+        onClose={() => {
+          setIsEmailModalOpen(false)
+          setCurrentClient(null)
+        }}
+        client={currentClient}
+        type="email"
       />
     </div>
   )
