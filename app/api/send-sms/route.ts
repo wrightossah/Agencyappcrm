@@ -1,33 +1,62 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { arkeselSMS } from "@/lib/arkesel-sms"
 
 export async function POST(request: NextRequest) {
   try {
-    const { to, message } = await request.json()
+    const { to, message, sender, sandbox = false, scheduleTime } = await request.json()
 
-    // Here you would integrate with Twilio or your SMS service
-    // For now, we'll simulate the API call
+    // Validate inputs
+    if (!to || !message) {
+      return NextResponse.json({ success: false, error: "Phone number and message are required" }, { status: 400 })
+    }
 
-    // Example Twilio integration:
-    // const accountSid = process.env.TWILIO_ACCOUNT_SID
-    // const authToken = process.env.TWILIO_AUTH_TOKEN
-    // const client = require('twilio')(accountSid, authToken)
+    // Ensure recipients is an array
+    const recipients = Array.isArray(to) ? to : [to]
 
-    // const result = await client.messages.create({
-    //   body: message,
-    //   from: process.env.TWILIO_PHONE_NUMBER,
-    //   to: to
-    // })
+    // Validate phone numbers
+    const invalidNumbers = recipients.filter((num) => !arkeselSMS.validatePhoneNumber(num))
+    if (invalidNumbers.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Invalid phone numbers: ${invalidNumbers.join(", ")}`,
+        },
+        { status: 400 },
+      )
+    }
 
-    // For demo purposes, we'll return a success response
-    console.log(`SMS would be sent to ${to}: ${message}`)
-
-    return NextResponse.json({
-      success: true,
-      message: "SMS sent successfully",
-      // sid: result.sid
+    // Send SMS using Arkesel
+    const result = await arkeselSMS.sendSMS({
+      recipients,
+      message,
+      sender,
+      sandbox,
+      scheduleTime,
     })
+
+    if (result.success) {
+      return NextResponse.json({
+        success: true,
+        message: result.message,
+        data: result.data,
+      })
+    } else {
+      return NextResponse.json(
+        {
+          success: false,
+          error: result.error || result.message,
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
-    console.error("SMS Error:", error)
-    return NextResponse.json({ success: false, error: "Failed to send SMS" }, { status: 500 })
+    console.error("SMS API Error:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Internal server error",
+      },
+      { status: 500 },
+    )
   }
 }

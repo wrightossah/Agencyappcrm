@@ -1,27 +1,45 @@
-// SMS Service using Twilio (you'll need to add Twilio credentials to environment variables)
-export async function sendSMS(phoneNumber: string, message: string) {
+import { arkeselSMS } from "./arkesel-sms"
+
+// SMS Service using Arkesel
+export async function sendSMS(
+  phoneNumber: string,
+  message: string,
+  options?: {
+    sender?: string
+    sandbox?: boolean
+    scheduleTime?: string
+  },
+) {
   try {
-    // This would typically call your backend API that handles Twilio
-    const response = await fetch("/api/send-sms", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: phoneNumber,
-        message: message,
-      }),
+    const result = await arkeselSMS.sendSMS({
+      recipients: [phoneNumber],
+      message: message,
+      sender: options?.sender,
+      sandbox: options?.sandbox || false,
+      scheduleTime: options?.scheduleTime,
     })
 
-    if (!response.ok) {
-      throw new Error("Failed to send SMS")
-    }
-
-    const result = await response.json()
-    return { success: true, data: result }
+    return result
   } catch (error) {
     console.error("SMS Error:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}
+
+// Get SMS Balance
+export async function getSMSBalance() {
+  try {
+    const result = await arkeselSMS.getBalance()
+    return result
+  } catch (error) {
+    console.error("Balance Error:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
   }
 }
 
@@ -54,26 +72,74 @@ export async function sendEmail(to: string, subject: string, message: string, cl
   }
 }
 
+// Schedule SMS
+export async function scheduleSMS(
+  phoneNumber: string,
+  message: string,
+  scheduleTime: string,
+  options?: {
+    sender?: string
+    sandbox?: boolean
+  },
+) {
+  try {
+    const result = await arkeselSMS.scheduleSMS({
+      recipients: [phoneNumber],
+      message: message,
+      scheduleTime: scheduleTime,
+      sender: options?.sender,
+      sandbox: options?.sandbox || false,
+    })
+
+    return result
+  } catch (error) {
+    console.error("Schedule SMS Error:", error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    }
+  }
+}
+
+// Validate phone number
+export function validatePhoneNumber(phoneNumber: string): boolean {
+  return arkeselSMS.validatePhoneNumber(phoneNumber)
+}
+
+// Format phone number
+export function formatPhoneNumber(phoneNumber: string): string {
+  return arkeselSMS.formatPhoneNumber(phoneNumber)
+}
+
 // Default message templates
 export const messageTemplates = {
   sms: {
-    greeting: "Hello {clientName}, this is a message from your insurance agent.",
-    policyReminder: "Hi {clientName}, your policy is due for renewal. Please contact us for details.",
-    thankYou: "Thank you {clientName} for choosing our insurance services. We appreciate your business!",
+    greeting: "Hello {clientName}, this is a message from your insurance agent at AgencyApp.",
+    policyReminder: "Hi {clientName}, your policy is due for renewal. Please contact us for details. - AgencyApp",
+    thankYou: "Thank you {clientName} for choosing our insurance services. We appreciate your business! - AgencyApp",
+    appointment:
+      "Hi {clientName}, this is a reminder about your appointment. Please contact us if you need to reschedule. - AgencyApp",
+    payment: "Hi {clientName}, your payment is due. Please make your payment to avoid policy lapse. - AgencyApp",
   },
   email: {
     subject: {
-      greeting: "Message from Your Insurance Agent",
-      policyReminder: "Policy Renewal Reminder",
-      thankYou: "Thank You for Your Business",
+      greeting: "Message from Your Insurance Agent - AgencyApp",
+      policyReminder: "Policy Renewal Reminder - AgencyApp",
+      thankYou: "Thank You for Your Business - AgencyApp",
+      appointment: "Appointment Reminder - AgencyApp",
+      payment: "Payment Reminder - AgencyApp",
     },
     body: {
       greeting:
-        "Dear {clientName},\n\nI hope this message finds you well. I wanted to reach out to you regarding your insurance needs.\n\nBest regards,\nYour Insurance Agent",
+        "Dear {clientName},\n\nI hope this message finds you well. I wanted to reach out to you regarding your insurance needs.\n\nBest regards,\nYour Insurance Agent\nAgencyApp",
       policyReminder:
-        "Dear {clientName},\n\nThis is a friendly reminder that your insurance policy is approaching its renewal date. Please contact us at your earliest convenience to discuss your renewal options.\n\nBest regards,\nYour Insurance Agent",
+        "Dear {clientName},\n\nThis is a friendly reminder that your insurance policy is approaching its renewal date. Please contact us at your earliest convenience to discuss your renewal options.\n\nBest regards,\nYour Insurance Agent\nAgencyApp",
       thankYou:
-        "Dear {clientName},\n\nThank you for choosing our insurance services. We truly appreciate your business and trust in our company.\n\nIf you have any questions or need assistance, please don't hesitate to contact us.\n\nBest regards,\nYour Insurance Agent",
+        "Dear {clientName},\n\nThank you for choosing our insurance services. We truly appreciate your business and trust in our company.\n\nIf you have any questions or need assistance, please don't hesitate to contact us.\n\nBest regards,\nYour Insurance Agent\nAgencyApp",
+      appointment:
+        "Dear {clientName},\n\nThis is a reminder about your upcoming appointment with us. Please let us know if you need to reschedule.\n\nBest regards,\nYour Insurance Agent\nAgencyApp",
+      payment:
+        "Dear {clientName},\n\nThis is a friendly reminder that your insurance payment is due. Please make your payment to avoid any policy lapse.\n\nBest regards,\nYour Insurance Agent\nAgencyApp",
     },
   },
 }
