@@ -19,6 +19,8 @@ import ClientReport from "./client-report"
 import { ensureAgentsTable, addCurrentUserAsAgent } from "./actions"
 import { CommunicationModal } from "./communication-modal"
 import { Mail, MessageSquare } from "lucide-react"
+import { handleSMSClick, isMobileDevice } from "@/utils/native-sms"
+import { handleEmailClick, getEmailTooltip } from "@/utils/native-email"
 
 // Update the Client interface to include both phone and phone_number
 interface Client {
@@ -826,7 +828,12 @@ export default function ClientsPage() {
                           size="sm"
                           variant="outline"
                           className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => openSmsModal(client)}
+                          onClick={() => handleSMSClick(client)}
+                          title={
+                            isMobileDevice()
+                              ? "Send SMS via your phone's messaging app"
+                              : "Copy SMS message to clipboard (works best on mobile)"
+                          }
                         >
                           <MessageSquare className="h-4 w-4 mr-1" />
                           SMS
@@ -835,7 +842,8 @@ export default function ClientsPage() {
                           size="sm"
                           variant="outline"
                           className="text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                          onClick={() => openEmailModal(client)}
+                          onClick={() => handleEmailClick(client)}
+                          title={getEmailTooltip()}
                         >
                           <Mail className="h-4 w-4 mr-1" />
                           Email
@@ -909,7 +917,12 @@ export default function ClientsPage() {
                             size="sm"
                             variant="ghost"
                             className="text-blue-600 hover:text-blue-700"
-                            onClick={() => openSmsModal(client)}
+                            onClick={() => handleSMSClick(client)}
+                            title={
+                              isMobileDevice()
+                                ? "Send SMS via your phone's messaging app"
+                                : "Copy SMS message to clipboard (works best on mobile)"
+                            }
                           >
                             <MessageSquare className="h-4 w-4" />
                             <span className="sr-only">SMS</span>
@@ -918,7 +931,8 @@ export default function ClientsPage() {
                             size="sm"
                             variant="ghost"
                             className="text-purple-600 hover:text-purple-700"
-                            onClick={() => openEmailModal(client)}
+                            onClick={() => handleEmailClick(client)}
+                            title={getEmailTooltip()}
                           >
                             <Mail className="h-4 w-4" />
                             <span className="sr-only">Email</span>
