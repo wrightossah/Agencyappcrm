@@ -1,29 +1,62 @@
+import { supabase } from "@/lib/supabase"
+
+interface Policy {
+  id: string
+  client_id: string
+  policy_type: string
+  policy_number: string
+  start_date: string
+  end_date: string
+  premium_paid: number
+  premium_amount?: number
+  commission_rate?: number
+  commission_amount?: number
+  policy_provider?: string
+  status?: string
+  description?: string
+  is_renewable?: boolean
+  active?: boolean
+  created_at?: string
+}
+
 interface Client {
   name: string
   phone: string
   policy_type?: string
   expiry_date?: string
+  id?: string // Added id to Client interface
 }
 
 /**
- * Formats a custom SMS message with client data
+ * Formats a custom SMS message with client and policy data
  */
-export function formatSMSMessage(client: Client): string {
-  const { name, policy_type, expiry_date } = client
+export function formatSMSMessage(client: Client, policies?: Policy[]): string {
+  const { name } = client
 
-  // Default message if policy data is missing
-  if (!policy_type || !expiry_date) {
-    return `Hi ${name}, this is a reminder about your insurance policy. Please contact us for more details.`
+  // If we have policy data, create a detailed message
+  if (policies && policies.length > 0) {
+    // Find the policy that's expiring soonest
+    const activePolicies = policies.filter((p) => p.status === "Active" || p.active)
+
+    if (activePolicies.length > 0) {
+      const nextExpiringPolicy = activePolicies.reduce((earliest, current) => {
+        const earliestDate = new Date(earliest.end_date)
+        const currentDate = new Date(current.end_date)
+        return currentDate < earliestDate ? current : earliest
+      })
+
+      const formattedDate = new Date(nextExpiringPolicy.end_date).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+
+      return `Hi ${name}, your ${nextExpiringPolicy.policy_type} policy is expiring on ${formattedDate}. Please renew soon to maintain coverage. Contact us for assistance.`
+    }
   }
 
-  // Format expiry date to be more readable
-  const formattedDate = new Date(expiry_date).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-
-  return `Hi ${name}, your ${policy_type} policy is expiring on ${formattedDate}. Please renew soon.`
+  // Enhanced fallback message
+  return `Hi ${name}, this is a reminder about your insurance policy. Please contact us to review your coverage and ensure it's up to date.`
 }
 
 /**
@@ -58,11 +91,11 @@ export function isMobileDevice(): boolean {
 }
 
 /**
- * Opens the native SMS app with pre-filled message
+ * Opens the native SMS app with pre-filled message including policy data
  */
-export function openNativeSMS(client: Client): boolean {
+export function openNativeSMS(client: Client, policies?: Policy[]): boolean {
   const phone = formatPhoneForSMS(client.phone)
-  const message = formatSMSMessage(client)
+  const message = formatSMSMessage(client, policies)
 
   if (!phone) {
     alert("No phone number available for this client.")
@@ -92,15 +125,37 @@ export function openNativeSMS(client: Client): boolean {
 }
 
 /**
- * Shows appropriate feedback based on device type
+ * Fetches policies for a client from Supabase
  */
-export function handleSMSClick(client: Client): void {
+export async function fetchClientPolicies(clientId: string): Promise<Policy[]> {
+  try {
+    const { data, error } = await supabase
+      .from("policies")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("end_date", { ascending: true })
+
+    if (error) throw error
+    return data || []
+  } catch (error) {
+    console.error("Error fetching client policies:", error)
+    return []
+  }
+}
+
+/**
+ * Shows appropriate feedback based on device type with policy data
+ */
+export async function handleSMSClick(client: Client): Promise<void> {
   const isMobile = isMobileDevice()
+
+  // Fetch policy data for more detailed message
+  const policies = await fetchClientPolicies(client.id)
 
   if (!isMobile) {
     // Desktop fallback
     const phone = formatPhoneForSMS(client.phone)
-    const message = formatSMSMessage(client)
+    const message = formatSMSMessage(client, policies)
 
     if (
       confirm("SMS links work best on mobile devices. Would you like to copy the message to your clipboard instead?")
@@ -120,7 +175,7 @@ export function handleSMSClick(client: Client): void {
       }
     }
   } else {
-    // Mobile device - open SMS app
-    openNativeSMS(client)
+    // Mobile device - open SMS app with policy data
+    openNativeSMS(client, policies)
   }
 }
