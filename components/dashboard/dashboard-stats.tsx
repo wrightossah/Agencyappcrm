@@ -29,6 +29,12 @@ export function DashboardStats() {
     try {
       setLoading(true)
 
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+
       // Get current date for calculations
       const now = new Date()
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
@@ -42,55 +48,67 @@ export function DashboardStats() {
         monthlySalesResult,
         emailsResult,
         smsResult,
-        remindersResult,
         expirationsResult,
       ] = await Promise.all([
-        // Total clients
+        // Total clients for current agent
         supabase
           .from("clients")
-          .select("id", { count: "exact", head: true }),
+          .select("id", { count: "exact", head: true })
+          .eq("agent_id", user.id),
 
-        // Policies (active vs expired)
+        // Policies for current agent (active vs expired)
         supabase
           .from("policies")
-          .select("status, end_date"),
+          .select("status, end_date, client_id")
+          .in(
+            "client_id",
+            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
+          ),
 
-        // Total sales (sum of all premiums)
+        // Total sales (sum of all premiums for agent's clients)
         supabase
           .from("policies")
-          .select("premium"),
+          .select("premium, client_id")
+          .in(
+            "client_id",
+            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
+          ),
 
-        // Monthly sales (this month)
+        // Monthly sales (this month for agent's clients)
         supabase
           .from("policies")
-          .select("premium, created_at")
-          .gte("created_at", firstDayOfMonth.toISOString()),
+          .select("premium, created_at, client_id")
+          .gte("created_at", firstDayOfMonth.toISOString())
+          .in(
+            "client_id",
+            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
+          ),
 
-        // Emails sent (if you have an emails table)
+        // Emails sent by current agent
         supabase
           .from("email_logs")
           .select("id", { count: "exact", head: true })
+          .eq("agent_id", user.id)
           .catch(() => ({ count: 0 })),
 
-        // SMS sent
+        // SMS sent by current agent
         supabase
           .from("sms_logs")
           .select("id", { count: "exact", head: true })
+          .eq("agent_id", user.id)
           .catch(() => ({ count: 0 })),
 
-        // Reminders sent (combine email and SMS)
-        supabase
-          .from("sms_logs")
-          .select("id", { count: "exact", head: true })
-          .catch(() => ({ count: 0 })),
-
-        // Upcoming expirations (next 30 days)
+        // Upcoming expirations (next 30 days for agent's clients)
         supabase
           .from("policies")
-          .select("id")
+          .select("id, client_id")
           .eq("status", "Active")
           .gte("end_date", now.toISOString().split("T")[0])
-          .lte("end_date", thirtyDaysFromNow.toISOString().split("T")[0]),
+          .lte("end_date", thirtyDaysFromNow.toISOString().split("T")[0])
+          .in(
+            "client_id",
+            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
+          ),
       ])
 
       // Process policies data

@@ -11,24 +11,17 @@ BEGIN
     -- Create the table
     CREATE TABLE public.sms_logs (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      recipient TEXT NOT NULL,
+      client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
+      agent_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
       message TEXT NOT NULL,
-      status TEXT NOT NULL,
-      message_id TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'attempted',
+      message_id VARCHAR(255),
       error_message TEXT,
-      error_code TEXT,
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-      updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
-      retry_count INTEGER DEFAULT 0,
-      metadata JSONB
+      error_code VARCHAR(50),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     );
 
-    -- Add indexes
-    CREATE INDEX idx_sms_logs_recipient ON public.sms_logs(recipient);
-    CREATE INDEX idx_sms_logs_status ON public.sms_logs(status);
-    CREATE INDEX idx_sms_logs_created_at ON public.sms_logs(created_at);
-    CREATE INDEX idx_sms_logs_message_id ON public.sms_logs(message_id);
-    
     -- Add RLS policies
     ALTER TABLE public.sms_logs ENABLE ROW LEVEL SECURITY;
     
@@ -50,6 +43,24 @@ BEGIN
       FOR UPDATE
       TO authenticated
       USING (true);
+      
+    -- Policy for viewing SMS logs
+    CREATE POLICY sms_logs_select_policy ON public.sms_logs
+        FOR SELECT USING (agent_id = auth.uid());
+
+    -- Policy for inserting SMS logs
+    CREATE POLICY sms_logs_insert_policy ON public.sms_logs
+        FOR INSERT WITH CHECK (agent_id = auth.uid());
+
+    -- Policy for updating SMS logs
+    CREATE POLICY sms_logs_update_policy ON public.sms_logs
+        FOR UPDATE USING (agent_id = auth.uid());
+
+    -- Create indexes
+    CREATE INDEX idx_sms_logs_client_id ON public.sms_logs(client_id);
+    CREATE INDEX idx_sms_logs_agent_id ON public.sms_logs(agent_id);
+    CREATE INDEX idx_sms_logs_status ON public.sms_logs(status);
+    CREATE INDEX idx_sms_logs_created_at ON public.sms_logs(created_at);
   END IF;
 END;
 $$ LANGUAGE plpgsql;
