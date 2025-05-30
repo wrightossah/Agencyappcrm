@@ -1,4 +1,4 @@
-import { BarChart3, Settings, UserPlus } from "lucide-react"
+import { BarChart3, Settings, UserPlus, FileText, CreditCard } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const quickActions = [
@@ -10,11 +10,25 @@ const quickActions = [
     color: "primary" as const,
   },
   {
-    title: "Go to Analytics",
+    title: "Reports",
     description: "View detailed reports",
+    icon: FileText,
+    href: "/dashboard/reports",
+    color: "secondary" as const,
+  },
+  {
+    title: "Analytics",
+    description: "Performance insights",
     icon: BarChart3,
     href: "/dashboard/analytics",
     color: "warning" as const,
+  },
+  {
+    title: "Subscription",
+    description: "Manage your subscription",
+    icon: CreditCard,
+    href: "/dashboard/subscription",
+    color: "success" as const,
   },
   {
     title: "Settings",

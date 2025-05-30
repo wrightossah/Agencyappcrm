@@ -50,50 +50,58 @@ export function DashboardStats() {
       const now = new Date()
       const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
+      // First, get all client IDs for this agent
+      const { data: agentClients } = await supabase.from("clients").select("id").eq("created_by", user.id)
+
+      const clientIds = agentClients?.map((c) => c.id) || []
+
+      if (clientIds.length === 0) {
+        setStats({
+          totalClients: 0,
+          activePolicies: 0,
+          totalSales: 0,
+          upcomingExpirations: 0,
+        })
+        return
+      }
+
       // Fetch all data in parallel
       const [clientsResult, activePoliciesResult, salesResult, expirationsResult] = await Promise.all([
         // Total clients for current agent
         supabase
           .from("clients")
           .select("id", { count: "exact", head: true })
-          .eq("agent_id", user.id),
+          .eq("created_by", user.id),
 
         // Active policies for current agent's clients
         supabase
           .from("policies")
-          .select("id, client_id", { count: "exact", head: true })
+          .select("id", { count: "exact", head: true })
           .eq("status", "Active")
-          .in(
-            "client_id",
-            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
-          ),
+          .in("client_id", clientIds),
 
-        // Total sales (sum of all premiums for agent's clients)
+        // All policies for sales calculation
         supabase
           .from("policies")
-          .select("premium, client_id")
-          .in(
-            "client_id",
-            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
-          ),
+          .select("premium_amount, premium_paid")
+          .in("client_id", clientIds),
 
         // Upcoming expirations (next 30 days for agent's clients)
         supabase
           .from("policies")
-          .select("id, client_id")
+          .select("id")
           .eq("status", "Active")
           .gte("end_date", now.toISOString().split("T")[0])
           .lte("end_date", thirtyDaysFromNow.toISOString().split("T")[0])
-          .in(
-            "client_id",
-            (await supabase.from("clients").select("id").eq("agent_id", user.id)).data?.map((c) => c.id) || [],
-          ),
+          .in("client_id", clientIds),
       ])
 
-      // Calculate total sales
+      // Calculate total sales from all policies
       const allPolicies = salesResult.data || []
       const totalSales = allPolicies.reduce((sum, policy) => {
-        return sum + (Number.parseFloat(policy.premium) || 0)
+        // Use premium_amount if available, otherwise fall back to premium_paid
+        const premium = policy.premium_amount || policy.premium_paid || 0
+        return sum + Number.parseFloat(premium.toString())
       }, 0)
 
       setStats({
