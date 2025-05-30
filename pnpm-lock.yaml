@@ -166,13 +166,13 @@ importers:
         version: 1.0.7(tailwindcss@3.4.17)
       twilio:
         specifier: latest
-        version: 5.6.1
+        version: 5.7.0
       vaul:
         specifier: ^0.9.6
         version: 0.9.6(@types/react-dom@19.0.0)(@types/react@19.0.0)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       zod:
         specifier: latest
-        version: 3.25.36
+        version: 3.25.42
     devDependencies:
       '@types/node':
         specifier: ^22
@@ -2336,8 +2336,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  twilio@5.6.1:
-    resolution: {integrity: sha512-rCwjDEmYl4mK4fNiTXf00YHOg2Xq5hejpwOBg/lhP8QSyDwHLLXj3igQ+cv9NAQcN+8RsJEY7rG4FysBUP8UKQ==}
+  twilio@5.7.0:
+    resolution: {integrity: sha512-AcN9jo/C0sFitprIg2G6CJF+EACvff+8fiTMxf7Puz+6jtmc0NgJTwmyQbPiAnJcpXWOrPdI92Obr3PV4ZKXkw==}
     engines: {node: '>=14.0'}
 
   typescript@5.0.2:
@@ -2434,8 +2434,8 @@ packages:
     engines: {node: '>= 14.6'}
     hasBin: true
 
-  zod@3.25.36:
-    resolution: {integrity: sha512-eRFS3i8T0IrpGdL8HQyqFAugGOn7jOjyGgGdtv5NY4Wkhi7lJDk732bNZ609YMIGFbLoaj6J69O1Mura23gfIw==}
+  zod@3.25.42:
+    resolution: {integrity: sha512-PcALTLskaucbeHc41tU/xfjfhcz8z0GdhhDcSgrCTmSazUuqnYqiXO63M0QUBVwpBlsLsNVn5qHSC5Dw3KZvaQ==}
 
 snapshots:
 
@@ -4561,7 +4561,7 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  twilio@5.6.1:
+  twilio@5.7.0:
     dependencies:
       axios: 1.9.0
       dayjs: 1.11.13
@@ -4665,4 +4665,4 @@ snapshots:
 
   yaml@2.8.0: {}
 
-  zod@3.25.36: {}
+  zod@3.25.42: {}

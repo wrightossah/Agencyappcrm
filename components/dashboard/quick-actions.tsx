@@ -1,5 +1,4 @@
-import { BarChart3, Mail, MessageSquare, Settings, UserPlus } from "lucide-react"
-
+import { BarChart3, Settings, UserPlus } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const quickActions = [
@@ -9,20 +8,6 @@ const quickActions = [
     icon: UserPlus,
     href: "/dashboard/clients/add",
     color: "primary" as const,
-  },
-  {
-    title: "Send Email Reminder",
-    description: "Email policy reminders",
-    icon: Mail,
-    href: "/dashboard/clients",
-    color: "secondary" as const,
-  },
-  {
-    title: "Send SMS Reminder",
-    description: "SMS policy reminders",
-    icon: MessageSquare,
-    href: "/dashboard/clients",
-    color: "success" as const,
   },
   {
     title: "Go to Analytics",
@@ -56,15 +41,15 @@ export function QuickActions() {
       </CardHeader>
       <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {quickActions.map((action: QuickActionProps) => (
-          <a key={action.title} href={action.href}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  {<action.icon className="h-4 w-4" />}
+          <a key={action.title} href={action.href} className="block">
+            <Card className="h-full transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <action.icon className="h-5 w-5" />
                   {action.title}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 <p className="text-sm text-muted-foreground">{action.description}</p>
               </CardContent>
             </Card>
