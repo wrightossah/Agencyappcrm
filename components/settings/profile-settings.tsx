@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Upload, User } from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
 
 interface Profile {
   id: string
@@ -28,30 +28,32 @@ export function ProfileSettings() {
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const { toast } = useToast()
+  const { user } = useAuth()
 
   useEffect(() => {
-    fetchProfile()
-  }, [])
+    if (user) {
+      fetchProfile()
+    }
+  }, [user])
 
   const fetchProfile = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return
+    if (!user) return
 
+    try {
       const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-      if (error) throw error
+      if (error && error.code !== "PGRST116") {
+        throw error
+      }
 
       setProfile({
         id: user.id,
-        full_name: data.full_name || "",
-        first_name: data.first_name || "",
-        last_name: data.last_name || "",
+        full_name: data?.full_name || "",
+        first_name: data?.first_name || "",
+        last_name: data?.last_name || "",
         email: user.email || "",
-        phone_number: data.phone_number || "",
-        avatar_url: data.avatar_url,
+        phone_number: data?.phone_number || "",
+        avatar_url: data?.avatar_url,
       })
     } catch (error) {
       console.error("Error fetching profile:", error)
@@ -66,33 +68,29 @@ export function ProfileSettings() {
   }
 
   const handleSave = async () => {
-    if (!profile) return
+    if (!profile || !user) return
 
     try {
       setSaving(true)
 
       // Update auth email if changed
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (user && user.email !== profile.email) {
+      if (user.email !== profile.email) {
         const { error: emailError } = await supabase.auth.updateUser({
           email: profile.email,
         })
         if (emailError) throw emailError
       }
 
-      // Update profile
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: profile.full_name,
-          first_name: profile.first_name,
-          last_name: profile.last_name,
-          phone_number: profile.phone_number,
-          avatar_url: profile.avatar_url,
-        })
-        .eq("id", profile.id)
+      // Update or insert profile
+      const { error } = await supabase.from("profiles").upsert({
+        id: profile.id,
+        full_name: profile.full_name,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone_number: profile.phone_number,
+        avatar_url: profile.avatar_url,
+        updated_at: new Date().toISOString(),
+      })
 
       if (error) throw error
 
@@ -167,14 +165,14 @@ export function ProfileSettings() {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Avatar Upload */}
-        <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
           <Avatar className="h-20 w-20">
             <AvatarImage src={profile.avatar_url || "/placeholder.svg"} />
             <AvatarFallback>
               <User className="h-8 w-8" />
             </AvatarFallback>
           </Avatar>
-          <div>
+          <div className="flex-1">
             <Label htmlFor="avatar-upload" className="cursor-pointer">
               <Button variant="outline" disabled={uploading} asChild>
                 <span>

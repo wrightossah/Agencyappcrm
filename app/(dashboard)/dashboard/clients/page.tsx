@@ -4,17 +4,15 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
-import { Plus, Search, Loader2, ArrowLeft, User } from "lucide-react"
+import { Plus, Search, Loader2, User, RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/components/auth-provider"
-import { useRouter } from "next/navigation"
 import ClientForm from "./client-form"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ensureAgentsTable, addCurrentUserAsAgent } from "./actions"
 import { ClientDetailsModal } from "@/components/client-details-modal"
+import DeleteConfirmation from "./delete-confirmation"
 
-// Update the Client interface to include both phone and phone_number
 interface Client {
   id: string
   created_by: string
@@ -27,54 +25,29 @@ interface Client {
 }
 
 export default function ClientsPage() {
-  // State for clients data
   const [clients, setClients] = useState<Client[]>([])
   const [filteredClients, setFilteredClients] = useState<Client[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // State for modals
+  // Modal states
   const [isClientFormOpen, setIsClientFormOpen] = useState(false)
   const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [formSubmitting, setFormSubmitting] = useState(false)
-
-  // State for validation
-  const [emailExists, setEmailExists] = useState(false)
-  const [phoneExists, setPhoneExists] = useState(false)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   const { toast } = useToast()
   const { user } = useAuth()
-  const router = useRouter()
 
-  // Ensure agents table and add current user as agent on component mount
   useEffect(() => {
     if (user) {
-      setupAgentAndFetchClients()
+      fetchClients()
     }
   }, [user])
-
-  // Setup agent and fetch clients
-  const setupAgentAndFetchClients = async () => {
-    if (!user) return
-
-    try {
-      // Ensure the agents table exists
-      await ensureAgentsTable()
-
-      // Add the current user as an agent if not already
-      await addCurrentUserAsAgent()
-
-      // Fetch clients
-      await fetchClients()
-    } catch (err: any) {
-      console.error("Error setting up agent:", err)
-      setError(err.message || "Failed to set up agent")
-      setLoading(false)
-    }
-  }
 
   // Filter clients when search query changes
   useEffect(() => {
@@ -87,7 +60,6 @@ export default function ClientsPage() {
     }
   }, [searchQuery, clients])
 
-  // Fetch clients from Supabase
   const fetchClients = async () => {
     if (!user) return
 
@@ -99,11 +71,10 @@ export default function ClientsPage() {
         .from("clients")
         .select("*")
         .eq("created_by", user.id)
-        .order("name", { ascending: true }) // Sort by name alphabetically
+        .order("name", { ascending: true })
 
       if (error) throw error
 
-      // Ensure all client objects have the required properties
       const validatedClients = (data || []).map((client) => ({
         id: client.id || "",
         created_by: client.created_by || user.id,
@@ -125,104 +96,17 @@ export default function ClientsPage() {
     }
   }
 
-  // Check if email or phone already exists
-  const checkDuplicates = async (email: string, phone: string, clientId?: string) => {
-    if (!user) return { emailExists: false, phoneExists: false }
-
-    try {
-      // Check for duplicate email
-      let query = supabase.from("clients").select("id").eq("created_by", user.id).eq("email", email)
-
-      // If editing, exclude current client
-      if (clientId) {
-        query = query.neq("id", clientId)
-      }
-
-      const { data: emailData, error: emailError } = await query
-
-      if (emailError) throw emailError
-
-      // Check for duplicate phone
-      let phoneQuery = supabase
-        .from("clients")
-        .select("id")
-        .eq("created_by", user.id)
-        .or(`phone.eq.${phone},phone_number.eq.${phone}`)
-
-      // If editing, exclude current client
-      if (clientId) {
-        phoneQuery = phoneQuery.neq("id", clientId)
-      }
-
-      const { data: phoneData, error: phoneError } = await phoneQuery
-
-      if (phoneError) throw phoneError
-
-      return {
-        emailExists: emailData && emailData.length > 0,
-        phoneExists: phoneData && phoneData.length > 0,
-      }
-    } catch (err) {
-      console.error("Error checking duplicates:", err)
-      return { emailExists: false, phoneExists: false }
-    }
-  }
-
-  // Handle adding a client
   const handleAddClient = async (client: Omit<Client, "id" | "created_by">) => {
     if (!user) return
 
     setFormSubmitting(true)
 
     try {
-      // First, check if the user exists in the 'agents' table
-      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
-
-      if (agentError || !agent) {
-        // If agent doesn't exist, try to add them
-        const agentResult = await addCurrentUserAsAgent()
-
-        if (!agentResult.success) {
-          toast({
-            title: "Authorization Error",
-            description: "You are not authorized to add clients. Please contact support.",
-            variant: "destructive",
-          })
-          setFormSubmitting(false)
-          return
-        }
-      }
-
-      // Check for duplicates
-      const { emailExists, phoneExists } = await checkDuplicates(client.email, client.phone_number)
-
-      if (emailExists) {
-        setEmailExists(true)
-        toast({
-          title: "Duplicate Email",
-          description: "This email is already linked to another client. Please use a different email address.",
-          variant: "destructive",
-        })
-        setFormSubmitting(false)
-        return
-      }
-
-      if (phoneExists) {
-        setPhoneExists(true)
-        toast({
-          title: "Duplicate Phone",
-          description: "This phone number is already associated with another client.",
-          variant: "destructive",
-        })
-        setFormSubmitting(false)
-        return
-      }
-
       const newClient = {
         created_by: user.id,
         name: client.name,
         address: client.address,
-        phone: client.phone_number, // Use the same formatted number for both fields
+        phone: client.phone_number,
         phone_number: client.phone_number,
         email: client.email,
       }
@@ -232,11 +116,9 @@ export default function ClientsPage() {
       if (error) throw error
 
       if (data && data.length > 0) {
-        // Add the new client and re-sort
         const updatedClients = [...clients, data[0]].sort((a, b) => a.name.localeCompare(b.name))
         setClients(updatedClients)
 
-        // Also update filtered clients if search query is empty
         if (searchQuery.trim() === "") {
           setFilteredClients(updatedClients)
         }
@@ -260,61 +142,18 @@ export default function ClientsPage() {
     }
   }
 
-  // Handle editing a client
   const handleEditClient = async (updatedClient: Client) => {
     if (!user) return
 
     setFormSubmitting(true)
 
     try {
-      // First, check if the user exists in the 'agents' table
-      const { data: agent, error: agentError } = await supabase.from("agents").select("id").eq("id", user.id).single()
-
-      if (agentError || !agent) {
-        toast({
-          title: "Authorization Error",
-          description: "You are not authorized to edit clients. Please contact support.",
-          variant: "destructive",
-        })
-        setFormSubmitting(false)
-        return
-      }
-
-      // Check for duplicates
-      const { emailExists, phoneExists } = await checkDuplicates(
-        updatedClient.email,
-        updatedClient.phone_number,
-        updatedClient.id,
-      )
-
-      if (emailExists) {
-        setEmailExists(true)
-        toast({
-          title: "Duplicate Email",
-          description: "This email is already linked to another client. Please use a different email address.",
-          variant: "destructive",
-        })
-        setFormSubmitting(false)
-        return
-      }
-
-      if (phoneExists) {
-        setPhoneExists(true)
-        toast({
-          title: "Duplicate Phone",
-          description: "This phone number is already associated with another client.",
-          variant: "destructive",
-        })
-        setFormSubmitting(false)
-        return
-      }
-
       const { error } = await supabase
         .from("clients")
         .update({
           name: updatedClient.name,
           address: updatedClient.address,
-          phone: updatedClient.phone_number, // Use the same formatted number for both fields
+          phone: updatedClient.phone_number,
           phone_number: updatedClient.phone_number,
           email: updatedClient.email,
         })
@@ -323,14 +162,12 @@ export default function ClientsPage() {
 
       if (error) throw error
 
-      // Update the clients list and re-sort
       const updatedClients = clients
         .map((client) => (client.id === updatedClient.id ? updatedClient : client))
         .sort((a, b) => a.name.localeCompare(b.name))
 
       setClients(updatedClients)
 
-      // Update selected client if it's the one being edited
       if (selectedClient?.id === updatedClient.id) {
         setSelectedClient(updatedClient)
       }
@@ -354,13 +191,11 @@ export default function ClientsPage() {
     }
   }
 
-  // Handle client click to show details
   const handleClientClick = (client: Client) => {
     setSelectedClient(client)
     setIsClientDetailsOpen(true)
   }
 
-  // Handle edit client from details modal
   const handleEditFromDetails = (client: Client) => {
     setSelectedClient(client)
     setIsEditing(true)
@@ -368,24 +203,27 @@ export default function ClientsPage() {
     setIsClientFormOpen(true)
   }
 
-  // Handle client deletion
-  const handleDeleteClient = async (clientId: string) => {
-    if (!user) return
+  const handleDeleteRequest = (client: Client) => {
+    setSelectedClient(client)
+    setIsDeleteConfirmOpen(true)
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!user || !selectedClient) return
+
+    setDeleteSubmitting(true)
 
     try {
-      const { error } = await supabase.from("clients").delete().eq("id", clientId).eq("created_by", user.id)
+      const { error } = await supabase.from("clients").delete().eq("id", selectedClient.id).eq("created_by", user.id)
 
       if (error) throw error
 
-      // Remove from clients list
-      const updatedClients = clients.filter((client) => client.id !== clientId)
+      const updatedClients = clients.filter((client) => client.id !== selectedClient.id)
       setClients(updatedClients)
 
-      // Close details modal if the deleted client was selected
-      if (selectedClient?.id === clientId) {
-        setIsClientDetailsOpen(false)
-        setSelectedClient(null)
-      }
+      setIsDeleteConfirmOpen(false)
+      setIsClientDetailsOpen(false)
+      setSelectedClient(null)
 
       toast({
         title: "Client Deleted",
@@ -398,21 +236,43 @@ export default function ClientsPage() {
         description: err.message || "Failed to delete client",
         variant: "destructive",
       })
+    } finally {
+      setDeleteSubmitting(false)
+    }
+  }
+
+  const handleDataReset = async () => {
+    if (!user) return
+
+    try {
+      // Delete all clients for this user
+      const { error } = await supabase.from("clients").delete().eq("created_by", user.id)
+
+      if (error) throw error
+
+      setClients([])
+      setFilteredClients([])
+
+      toast({
+        title: "Data Reset",
+        description: "All client data has been reset successfully.",
+      })
+    } catch (err: any) {
+      console.error("Error resetting data:", err)
+      toast({
+        title: "Error",
+        description: err.message || "Failed to reset data",
+        variant: "destructive",
+      })
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
-      <Button variant="ghost" size="sm" className="mb-4" onClick={() => router.back()}>
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back
-      </Button>
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted-foreground">Manage your client information and policies</p>
+          <p className="text-muted-foreground">Manage your client information</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -453,29 +313,44 @@ export default function ClientsPage() {
         </div>
       ) : (
         <>
-          {/* Simple Client List */}
+          {/* Client List */}
           {filteredClients.length === 0 ? (
             <div className="text-center py-10">
-              <p className="text-muted-foreground mb-4">
-                {searchQuery ? "No clients found matching your search" : "No clients found"}
+              <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                <User className="h-12 w-12 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-semibold mb-2">{searchQuery ? "No clients found" : "No clients yet"}</h3>
+              <p className="text-muted-foreground mb-6">
+                {searchQuery
+                  ? "Try adjusting your search terms"
+                  : "Start building your client base by adding your first client"}
               </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedClient(null)
-                  setIsEditing(false)
-                  setIsClientFormOpen(true)
-                }}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Your First Client
-              </Button>
+              <div className="flex gap-2 justify-center">
+                {!searchQuery && (
+                  <Button
+                    onClick={() => {
+                      setSelectedClient(null)
+                      setIsEditing(false)
+                      setIsClientFormOpen(true)
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Your First Client
+                  </Button>
+                )}
+                {clients.length > 0 && (
+                  <Button variant="outline" onClick={handleDataReset}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reset Data
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <Card>
               <CardContent className="p-0">
                 <div className="divide-y">
-                  {filteredClients.map((client, index) => (
+                  {filteredClients.map((client) => (
                     <div
                       key={client.id}
                       className="flex items-center p-4 hover:bg-muted/50 cursor-pointer transition-colors duration-150"
@@ -518,15 +393,11 @@ export default function ClientsPage() {
           setIsClientFormOpen(false)
           setSelectedClient(null)
           setIsEditing(false)
-          setEmailExists(false)
-          setPhoneExists(false)
         }}
         onSave={isEditing ? handleEditClient : handleAddClient}
         client={selectedClient}
         isEditing={isEditing}
         isSubmitting={formSubmitting}
-        emailExists={emailExists}
-        phoneExists={phoneExists}
       />
 
       {/* Client Details Modal */}
@@ -538,8 +409,20 @@ export default function ClientsPage() {
         }}
         client={selectedClient}
         onEdit={handleEditFromDetails}
-        onDelete={handleDeleteClient}
+        onDelete={handleDeleteRequest}
         onRefresh={fetchClients}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmation
+        isOpen={isDeleteConfirmOpen}
+        onClose={() => {
+          setIsDeleteConfirmOpen(false)
+          setSelectedClient(null)
+        }}
+        onConfirm={handleDeleteConfirm}
+        client={selectedClient}
+        isSubmitting={deleteSubmitting}
       />
     </div>
   )

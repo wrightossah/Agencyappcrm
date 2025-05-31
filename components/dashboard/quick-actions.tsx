@@ -1,40 +1,19 @@
-import { BarChart3, Settings, UserPlus, FileText, CreditCard } from "lucide-react"
+import { BarChart3, CreditCard } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 const quickActions = [
   {
-    title: "Add New Client",
-    description: "Register a new client",
-    icon: UserPlus,
-    href: "/dashboard/clients/add",
+    title: "View Reports",
+    description: "Access detailed analytics",
+    icon: BarChart3,
+    href: "/dashboard/analytics",
     color: "primary" as const,
   },
   {
-    title: "Reports",
-    description: "View detailed reports",
-    icon: FileText,
-    href: "/dashboard/reports",
-    color: "secondary" as const,
-  },
-  {
-    title: "Analytics",
-    description: "Performance insights",
-    icon: BarChart3,
-    href: "/dashboard/analytics",
-    color: "warning" as const,
-  },
-  {
     title: "Subscription",
-    description: "Manage your subscription",
+    description: "Manage your plan",
     icon: CreditCard,
     href: "/dashboard/subscription",
-    color: "success" as const,
-  },
-  {
-    title: "Settings",
-    description: "Manage your account",
-    icon: Settings,
-    href: "/dashboard/settings",
     color: "secondary" as const,
   },
 ]
@@ -53,7 +32,7 @@ export function QuickActions() {
       <CardHeader>
         <CardTitle>Quick Actions</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <CardContent className="grid gap-4 md:grid-cols-2">
         {quickActions.map((action: QuickActionProps) => (
           <a key={action.title} href={action.href} className="block">
             <Card className="h-full transition-all duration-200 hover:shadow-md hover:scale-105 cursor-pointer">

@@ -55,7 +55,7 @@ export const SalesPerformanceChart = ({ data }: { data: any[] }) => {
         <YAxis
           yAxisId="right"
           orientation="right"
-          tickFormatter={(value) => `$${value}`}
+          tickFormatter={(value) => `₵${value}`}
           tick={{ fill: isDark ? "#9ca3af" : "#4b5563" }}
           tickLine={{ stroke: isDark ? "#4b5563" : "#9ca3af" }}
           axisLine={{ stroke: isDark ? "#4b5563" : "#d1d5db" }}
@@ -67,7 +67,7 @@ export const SalesPerformanceChart = ({ data }: { data: any[] }) => {
             color: isDark ? "#e5e7eb" : "#374151",
           }}
           formatter={(value, name) => {
-            if (name === "revenue") return [`Ghc ${value}`, "Revenue"]
+            if (name === "revenue") return [`₵${value}`, "Revenue"]
             return [value, "Sales"]
           }}
         />
@@ -107,7 +107,7 @@ export const CommissionBreakdownChart = ({ data }: { data: any[] }) => {
           tick={{ fill: isDark ? "#9ca3af" : "#4b5563" }}
           tickLine={{ stroke: isDark ? "#4b5563" : "#9ca3af" }}
           axisLine={{ stroke: isDark ? "#4b5563" : "#d1d5db" }}
-          tickFormatter={(value) => `Ghc ${value}`}
+          tickFormatter={(value) => `₵${value}`}
         />
         <YAxis
           type="category"
@@ -122,7 +122,7 @@ export const CommissionBreakdownChart = ({ data }: { data: any[] }) => {
             borderColor: isDark ? "#374151" : "#e5e7eb",
             color: isDark ? "#e5e7eb" : "#374151",
           }}
-          formatter={(value, name) => [`Ghc ${value}`, name === "premium" ? "Premium" : "Commission"]}
+          formatter={(value, name) => [`₵${value}`, name === "premium" ? "Premium" : "Commission"]}
         />
         <Legend />
         <Bar dataKey="premium" fill={CHART_COLORS[2]} name="Premium" animationDuration={1000} radius={[0, 4, 4, 0]} />

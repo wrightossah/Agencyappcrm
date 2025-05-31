@@ -4,11 +4,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { X, Send, Loader2 } from "lucide-react"
+import { X, Send } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/components/auth-provider"
-import { supabase } from "@/lib/supabase"
-import { formatPhoneNumber } from "@/utils/format-utils"
 
 interface SMSModalProps {
   isOpen: boolean
@@ -23,25 +21,20 @@ interface SMSModalProps {
 
 export function SMSModal({ isOpen, onClose, client }: SMSModalProps) {
   const [message, setMessage] = useState("")
-  const [sending, setSending] = useState(false)
   const [charCount, setCharCount] = useState(0)
   const { toast } = useToast()
-  const { user, profile } = useAuth()
+  const { profile } = useAuth()
 
-  // Reset message when modal opens with new client
   useEffect(() => {
     if (isOpen && client) {
-      // Default message template
       setMessage(`Hi ${client.name},\n\n`)
     }
   }, [isOpen, client])
 
-  // Update character count
   useEffect(() => {
     setCharCount(message.length)
   }, [message])
 
-  // Get agent signature
   const getSignature = () => {
     if (profile?.full_name) {
       return `\n\nRegards,\n${profile.full_name}`
@@ -49,8 +42,7 @@ export function SMSModal({ isOpen, onClose, client }: SMSModalProps) {
     return `\n\nRegards,\nYour Insurance Agent`
   }
 
-  // Handle sending SMS
-  const handleSendSMS = async () => {
+  const handleSendSMS = () => {
     if (!client || !message.trim()) {
       toast({
         title: "Error",
@@ -60,93 +52,68 @@ export function SMSModal({ isOpen, onClose, client }: SMSModalProps) {
       return
     }
 
-    setSending(true)
-
     try {
-      // Add signature to message
       const fullMessage = message + getSignature()
+      const phone = formatPhoneForSMS(client.phone || client.phone_number || "")
 
-      // Log SMS attempt to Supabase
-      await logSMSAttempt(client.id, fullMessage)
+      if (!phone) {
+        toast({
+          title: "Error",
+          description: "No valid phone number for this client",
+          variant: "destructive",
+        })
+        return
+      }
 
-      // Format phone number
-      const phone = client.phone || client.phone_number || ""
-      const formattedPhone = formatPhoneForSMS(phone)
+      // Create SMS URI and open native SMS app
+      const smsURI = `sms:${phone}?body=${encodeURIComponent(fullMessage)}`
+      window.open(smsURI, "_self")
 
-      // Send SMS via API
-      const response = await fetch("/api/send-sms", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          to: formattedPhone,
-          message: fullMessage,
-          metadata: {
-            clientId: client.id,
-            agentId: user?.id,
-          },
-        }),
+      toast({
+        title: "SMS App Opened",
+        description: `Message prepared for ${client.name}`,
       })
 
-      const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "SMS Sent",
-          description: `Message sent to ${client.name}`,
-        })
-        onClose()
-      } else {
-        throw new Error(result.error || "Failed to send SMS")
-      }
+      onClose()
     } catch (error: any) {
       console.error("SMS Error:", error)
       toast({
         title: "SMS Failed",
-        description: error.message || "Failed to send SMS",
+        description: "Failed to open SMS app",
         variant: "destructive",
       })
-    } finally {
-      setSending(false)
     }
   }
 
-  // Log SMS attempt to Supabase
-  const logSMSAttempt = async (clientId: string, message: string) => {
-    try {
-      if (!user) return
-
-      await supabase.from("sms_logs").insert({
-        client_id: clientId,
-        agent_id: user.id,
-        message: message,
-        status: "attempted",
-        created_at: new Date().toISOString(),
-      })
-    } catch (error) {
-      console.error("Failed to log SMS attempt:", error)
-    }
-  }
-
-  // Format phone number for SMS
   const formatPhoneForSMS = (phone: string): string => {
     if (!phone) return ""
 
-    // Remove all non-digit characters except +
     let cleaned = phone.replace(/[^\d+]/g, "")
 
-    // If it starts with 0, replace with +233 (Ghana country code)
     if (cleaned.startsWith("0")) {
       cleaned = "+233" + cleaned.substring(1)
     }
 
-    // If it doesn't start with +, add +233
     if (!cleaned.startsWith("+")) {
       cleaned = "+233" + cleaned
     }
 
     return cleaned
+  }
+
+  const formatPhoneNumber = (phone: string) => {
+    if (!phone) return ""
+
+    if (phone.startsWith("+233")) {
+      return phone.replace(/(\+233)(\d{2})(\d{3})(\d{4})/, "$1 $2 $3 $4")
+    }
+
+    if (phone.startsWith("0")) {
+      const withCountryCode = "+233" + phone.substring(1)
+      return withCountryCode.replace(/(\+233)(\d{2})(\d{3})(\d{4})/, "$1 $2 $3 $4")
+    }
+
+    return phone
   }
 
   return (
@@ -185,26 +152,17 @@ export function SMSModal({ isOpen, onClose, client }: SMSModalProps) {
           </div>
 
           <div className="text-xs text-muted-foreground">
-            <p>Your name will be automatically added as a signature.</p>
+            <p>Your signature will be automatically added. This will open your device's SMS app.</p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={sending}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSendSMS} disabled={!message.trim() || sending}>
-            {sending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Send className="mr-2 h-4 w-4" />
-                Send SMS
-              </>
-            )}
+          <Button onClick={handleSendSMS} disabled={!message.trim()}>
+            <Send className="mr-2 h-4 w-4" />
+            Open SMS App
           </Button>
         </DialogFooter>
       </DialogContent>

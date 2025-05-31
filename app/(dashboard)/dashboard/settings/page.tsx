@@ -4,7 +4,7 @@ import { PasswordSettings } from "@/components/settings/password-settings"
 
 export default function SettingsPage() {
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8">
       <div className="space-y-6">
         <div>
           <h2 className="text-2xl font-bold">Settings</h2>

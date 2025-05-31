@@ -18,11 +18,11 @@ import { SalesPerformanceChart, CommissionBreakdownChart, PolicyDistributionChar
 import type { DateRange } from "react-day-picker"
 import { format, subMonths } from "date-fns"
 import { exportToCSV, exportToPDF } from "./export-utils"
-import { SalesTracker } from "./sales-tracker"
+import { useAuth } from "@/components/auth-provider"
 
 export default function AnalyticsPage() {
-  // Theme state
   const { theme, setTheme } = useTheme()
+  const { user } = useAuth()
 
   // Filter states
   const [date, setDate] = useState<DateRange | undefined>({
@@ -41,48 +41,47 @@ export default function AnalyticsPage() {
 
   // Fetch data based on filters
   useEffect(() => {
-    async function fetchData() {
-      setLoading(true)
-      setError(null)
-
-      try {
-        // Format dates for queries
-        const fromDate = date?.from ? format(date.from, "yyyy-MM-dd") : null
-        const toDate = date?.to ? format(date.to, "yyyy-MM-dd") : null
-
-        // Sales Performance Data
-        const { data: salesResult, error: salesError } = await fetchSalesData(fromDate, toDate, policyType)
-        if (salesError) throw new Error(salesError.message)
-        setSalesData(salesResult || [])
-
-        // Commission Data
-        const { data: commissionResult, error: commissionError } = await fetchCommissionData(
-          fromDate,
-          toDate,
-          policyType,
-        )
-        if (commissionError) throw new Error(commissionError.message)
-        setCommissionData(commissionResult || [])
-
-        // Policy Distribution Data
-        const { data: policyResult, error: policyError } = await fetchPolicyDistribution(fromDate, toDate, policyType)
-        if (policyError) throw new Error(policyError.message)
-        setPolicyDistData(policyResult || [])
-
-        // Client Activity Data
-        const { data: clientResult, error: clientError } = await fetchClientActivity(fromDate, toDate, policyType)
-        if (clientError) throw new Error(clientError.message)
-        setClientActivityData(clientResult || [])
-      } catch (err) {
-        console.error("Error fetching analytics data:", err)
-        setError(err instanceof Error ? err.message : "An unknown error occurred")
-      } finally {
-        setLoading(false)
-      }
+    if (user) {
+      fetchData()
     }
+  }, [date, policyType, user])
 
-    fetchData()
-  }, [date, policyType])
+  const fetchData = async () => {
+    if (!user) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const fromDate = date?.from ? format(date.from, "yyyy-MM-dd") : null
+      const toDate = date?.to ? format(date.to, "yyyy-MM-dd") : null
+
+      // Sales Performance Data
+      const { data: salesResult, error: salesError } = await fetchSalesData(fromDate, toDate, policyType)
+      if (salesError) throw new Error(salesError.message)
+      setSalesData(salesResult || [])
+
+      // Commission Data
+      const { data: commissionResult, error: commissionError } = await fetchCommissionData(fromDate, toDate, policyType)
+      if (commissionError) throw new Error(commissionError.message)
+      setCommissionData(commissionResult || [])
+
+      // Policy Distribution Data
+      const { data: policyResult, error: policyError } = await fetchPolicyDistribution(fromDate, toDate, policyType)
+      if (policyError) throw new Error(policyError.message)
+      setPolicyDistData(policyResult || [])
+
+      // Client Activity Data
+      const { data: clientResult, error: clientError } = await fetchClientActivity(fromDate, toDate, policyType)
+      if (clientError) throw new Error(clientError.message)
+      setClientActivityData(clientResult || [])
+    } catch (err) {
+      console.error("Error fetching analytics data:", err)
+      setError(err instanceof Error ? err.message : "An unknown error occurred")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Handle exports
   const handleExportCSV = () => {
@@ -107,6 +106,178 @@ export default function AnalyticsPage() {
       },
       date,
     )
+  }
+
+  // Supabase Query Functions
+  const fetchSalesData = async (fromDate: string | null, toDate: string | null, policyType: string) => {
+    let query = supabase
+      .from("policies")
+      .select(`
+        created_at,
+        premium_paid,
+        premium_amount,
+        policy_type
+      `)
+      .eq("created_by", user.id)
+
+    if (fromDate) {
+      query = query.gte("created_at", fromDate)
+    }
+
+    if (toDate) {
+      query = query.lte("created_at", toDate)
+    }
+
+    if (policyType !== "all") {
+      query = query.eq("policy_type", policyType)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { data: null, error }
+    }
+
+    // Process data to group by month
+    const monthlyData = data.reduce((acc: any, policy: any) => {
+      const month = format(new Date(policy.created_at), "MMM yyyy")
+
+      if (!acc[month]) {
+        acc[month] = { month, sales: 0, revenue: 0 }
+      }
+
+      acc[month].sales += 1
+      acc[month].revenue += Number.parseFloat(policy.premium_paid || policy.premium_amount || 0)
+
+      return acc
+    }, {})
+
+    return { data: Object.values(monthlyData), error: null }
+  }
+
+  const fetchCommissionData = async (fromDate: string | null, toDate: string | null, policyType: string) => {
+    let query = supabase
+      .from("policies")
+      .select(`
+        policy_type,
+        premium_paid,
+        premium_amount,
+        commission_rate
+      `)
+      .eq("created_by", user.id)
+
+    if (fromDate) {
+      query = query.gte("created_at", fromDate)
+    }
+
+    if (toDate) {
+      query = query.lte("created_at", toDate)
+    }
+
+    if (policyType !== "all") {
+      query = query.eq("policy_type", policyType)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { data: null, error }
+    }
+
+    // Process data to group by policy type
+    const commissionByType = data.reduce((acc: any, policy: any) => {
+      const type = policy.policy_type
+
+      if (!acc[type]) {
+        acc[type] = { name: type, premium: 0, commission: 0 }
+      }
+
+      const premium = Number.parseFloat(policy.premium_paid || policy.premium_amount || 0)
+      const commissionRate = Number.parseFloat(policy.commission_rate || 0.1)
+
+      acc[type].premium += premium
+      acc[type].commission += premium * commissionRate
+
+      return acc
+    }, {})
+
+    return { data: Object.values(commissionByType), error: null }
+  }
+
+  const fetchPolicyDistribution = async (fromDate: string | null, toDate: string | null, policyType: string) => {
+    let query = supabase.from("policies").select(`policy_type`).eq("created_by", user.id)
+
+    if (fromDate) {
+      query = query.gte("created_at", fromDate)
+    }
+
+    if (toDate) {
+      query = query.lte("created_at", toDate)
+    }
+
+    if (policyType !== "all") {
+      query = query.eq("policy_type", policyType)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { data: null, error }
+    }
+
+    // Count policies by type
+    const policyTypes = data.reduce((acc: any, policy: any) => {
+      const type = policy.policy_type
+
+      if (!acc[type]) {
+        acc[type] = { name: type, value: 0 }
+      }
+
+      acc[type].value += 1
+
+      return acc
+    }, {})
+
+    return { data: Object.values(policyTypes), error: null }
+  }
+
+  const fetchClientActivity = async (fromDate: string | null, toDate: string | null, policyType: string) => {
+    let query = supabase
+      .from("clients")
+      .select(`
+        id,
+        created_at
+      `)
+      .eq("created_by", user.id)
+
+    if (fromDate) {
+      query = query.gte("created_at", fromDate)
+    }
+
+    if (toDate) {
+      query = query.lte("created_at", toDate)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      return { data: null, error }
+    }
+
+    // For simplicity, we'll show total clients and new clients
+    const totalClients = data.length
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+    const newClients = data.filter((client) => new Date(client.created_at) >= thirtyDaysAgo).length
+
+    return {
+      data: [
+        { name: "Existing Clients", value: totalClients - newClients },
+        { name: "New Clients", value: newClients },
+      ],
+      error: null,
+    }
   }
 
   return (
@@ -191,9 +362,6 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
-      {/* Sales Tracker */}
-      <SalesTracker />
-
       {/* Error Message */}
       {error && (
         <Alert variant="destructive">
@@ -270,7 +438,7 @@ export default function AnalyticsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Client Activity</CardTitle>
-              <CardDescription>Active vs. Inactive clients</CardDescription>
+              <CardDescription>Client acquisition and engagement</CardDescription>
             </CardHeader>
             <CardContent className="h-80">
               {loading ? (
@@ -294,7 +462,7 @@ export default function AnalyticsPage() {
           loading={loading}
         />
         <MetricCard title="Active Policies" value={calculateActivePolicies(policyDistData)} loading={loading} />
-        <MetricCard title="Active Clients" value={calculateActiveClients(clientActivityData)} loading={loading} />
+        <MetricCard title="Total Clients" value={calculateTotalClients(clientActivityData)} loading={loading} />
       </div>
     </div>
   )
@@ -308,7 +476,7 @@ function formatCurrency(amount: number) {
     currencyDisplay: "code",
   })
     .format(amount)
-    .replace("GHS", "Ghc")
+    .replace("GHS", "₵")
 }
 
 function calculateTotalRevenue(data: any[]) {
@@ -323,8 +491,8 @@ function calculateActivePolicies(data: any[]) {
   return data.reduce((sum, item) => sum + (item.value || 0), 0)
 }
 
-function calculateActiveClients(data: any[]) {
-  return data.find((item) => item.name === "Active")?.value || 0
+function calculateTotalClients(data: any[]) {
+  return data.reduce((sum, item) => sum + (item.value || 0), 0)
 }
 
 // Metric Card Component
@@ -339,181 +507,4 @@ function MetricCard({ title, value, loading }: { title: string; value: string | 
       </CardContent>
     </Card>
   )
-}
-
-// Supabase Query Functions
-async function fetchSalesData(fromDate: string | null, toDate: string | null, policyType: string) {
-  let query = supabase.from("policies").select(`
-      created_at,
-      premium,
-      policy_type,
-      premium_paid
-    `)
-
-  if (fromDate) {
-    query = query.gte("created_at", fromDate)
-  }
-
-  if (toDate) {
-    query = query.lte("created_at", toDate)
-  }
-
-  if (policyType !== "all") {
-    query = query.eq("policy_type", policyType)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return { data: null, error }
-  }
-
-  // Process data to group by month
-  const monthlyData = data.reduce((acc: any, policy: any) => {
-    const month = format(new Date(policy.created_at), "MMM yyyy")
-
-    if (!acc[month]) {
-      acc[month] = { month, sales: 0, revenue: 0 }
-    }
-
-    acc[month].sales += 1
-    acc[month].revenue += Number.parseFloat(policy.premium_paid || policy.premium || 0)
-
-    return acc
-  }, {})
-
-  return { data: Object.values(monthlyData), error: null }
-}
-
-async function fetchCommissionData(fromDate: string | null, toDate: string | null, policyType: string) {
-  let query = supabase.from("policies").select(`
-      policy_type,
-      premium,
-      commission_rate,
-      premium_paid
-    `)
-
-  if (fromDate) {
-    query = query.gte("created_at", fromDate)
-  }
-
-  if (toDate) {
-    query = query.lte("created_at", toDate)
-  }
-
-  if (policyType !== "all") {
-    query = query.eq("policy_type", policyType)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return { data: null, error }
-  }
-
-  // Process data to group by policy type
-  const commissionByType = data.reduce((acc: any, policy: any) => {
-    const type = policy.policy_type
-
-    if (!acc[type]) {
-      acc[type] = { name: type, premium: 0, commission: 0 }
-    }
-
-    const premium = Number.parseFloat(policy.premium_paid || policy.premium || 0)
-    const commissionRate = Number.parseFloat(policy.commission_rate || 0.1) // Default 10% if not specified
-
-    acc[type].premium += premium
-    acc[type].commission += premium * commissionRate
-
-    return acc
-  }, {})
-
-  return { data: Object.values(commissionByType), error: null }
-}
-
-async function fetchPolicyDistribution(fromDate: string | null, toDate: string | null, policyType: string) {
-  let query = supabase
-    .from("policies")
-    .select(`
-      policy_type,
-      count
-    `)
-    .select()
-
-  if (fromDate) {
-    query = query.gte("created_at", fromDate)
-  }
-
-  if (toDate) {
-    query = query.lte("created_at", toDate)
-  }
-
-  if (policyType !== "all") {
-    query = query.eq("policy_type", policyType)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return { data: null, error }
-  }
-
-  // Count policies by type
-  const policyTypes = data.reduce((acc: any, policy: any) => {
-    const type = policy.policy_type
-
-    if (!acc[type]) {
-      acc[type] = { name: type, value: 0 }
-    }
-
-    acc[type].value += 1
-
-    return acc
-  }, {})
-
-  return { data: Object.values(policyTypes), error: null }
-}
-
-async function fetchClientActivity(fromDate: string | null, toDate: string | null, policyType: string) {
-  let query = supabase.from("clients").select(`
-      id,
-      active,
-      policies (
-        policy_type
-      )
-    `)
-
-  if (fromDate) {
-    query = query.gte("created_at", fromDate)
-  }
-
-  if (toDate) {
-    query = query.lte("created_at", toDate)
-  }
-
-  const { data, error } = await query
-
-  if (error) {
-    return { data: null, error }
-  }
-
-  // Filter by policy type if needed
-  let filteredData = data
-  if (policyType !== "all") {
-    filteredData = data.filter(
-      (client) => client.policies && client.policies.some((policy: any) => policy.policy_type === policyType),
-    )
-  }
-
-  // Count active vs inactive
-  const activeCount = filteredData.filter((client) => client.active).length
-  const inactiveCount = filteredData.length - activeCount
-
-  return {
-    data: [
-      { name: "Active", value: activeCount },
-      { name: "Inactive", value: inactiveCount },
-    ],
-    error: null,
-  }
 }

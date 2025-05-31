@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Loader2 } from "lucide-react"
 
-// Update the Client interface to include both phone and phone_number
 interface Client {
   id: string
   created_by: string
@@ -43,10 +42,10 @@ export default function DeleteConfirmation({
     <AlertDialog open={isOpen} onOpenChange={onClose}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
           <AlertDialogDescription>
             This action cannot be undone. This will permanently delete{" "}
-            <span className="font-semibold">{client?.name}</span> and all associated data.
+            <span className="font-semibold">{client?.name}</span> and all associated data including policies and claims.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -58,7 +57,7 @@ export default function DeleteConfirmation({
                 Deleting...
               </>
             ) : (
-              "Delete"
+              "Delete Client"
             )}
           </AlertDialogAction>
         </AlertDialogFooter>
